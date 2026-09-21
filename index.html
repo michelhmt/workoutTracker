@@ -1,0 +1,2580 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workout Tracker - Mark Lauren Calisthenics</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Tone.js for clean browser-synthesized audio cues -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                        },
+                        ladder: '#3b82f6',
+                        warning: '#f59e0b',
+                        danger: '#ef4444'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Scrollbar and UI adjustments */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 9999px;
+        }
+
+        .tap-highlight-none {
+            -webkit-tap-highlight-color: transparent;
+        }
+    </style>
+</head>
+
+<body
+    class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
+
+    <header class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur border-b border-slate-800 px-4 py-3">
+        <div class="max-w-4xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div
+                    class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-900/30">
+                    <i class="fa-solid fa-dumbbell text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                        WorkoutTracker
+                        <span
+                            class="text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">YAYOG</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">マーク・ローレン 自重トレ管理</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2">
+                <!-- Auth Button (when logged out) -->
+                <button id="authBtn" onclick="openAuthModal()"
+                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow transition active:scale-95">
+                    <i class="fa-solid fa-right-to-bracket"></i>
+                    <span>ログイン</span>
+                </button>
+
+                <!-- User Profile Badge & Logout (when logged in) -->
+                <div id="userProfileBadge"
+                    class="hidden items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs">
+                    <i class="fa-solid fa-user-check text-emerald-400"></i>
+                    <span id="userEmailText"
+                        class="max-w-[100px] sm:max-w-[150px] truncate text-slate-200 font-semibold text-[11px]">-</span>
+                    <button onclick="handleSignOut()" class="text-slate-400 hover:text-rose-400 ml-1 p-0.5 transition"
+                        title="ログアウト">
+                        <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                    </button>
+                </div>
+
+                <button id="supabaseConfigBtn"
+                    class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+                    title="Supabase接続設定">
+                    <i class="fa-solid fa-cloud text-emerald-400"></i>
+                    <span id="syncStatusBadge" class="hidden sm:inline">未ログイン</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Current Active Project Status Banner -->
+    <div class="bg-slate-900/60 border-b border-slate-800/80 px-4 py-2.5">
+        <div class="max-w-4xl mx-auto flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span class="text-slate-400">進行中:</span>
+                <span id="headerProjectName" class="font-bold text-white">-</span>
+                <span id="headerProjectLevelBadge"
+                    class="px-2 py-0.5 rounded-md bg-sky-500/20 text-sky-300 font-semibold border border-sky-500/30">レベル</span>
+                <span id="headerProjectWeekBadge"
+                    class="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-mono font-semibold border border-emerald-500/30">今週:
+                    Week 1</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="openNewProjectModal()"
+                    class="text-xs text-slate-400 hover:text-emerald-400 flex items-center gap-1 font-medium transition">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                    <span>プログラム切替</span>
+                </button>
+                <button onclick="switchTab('calendar')"
+                    class="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-medium transition active:scale-95">
+                    <i class="fa-solid fa-calendar-days text-[11px]"></i>
+                    <span>カレンダー</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <main class="flex-1 max-w-4xl w-full mx-auto p-4 pb-24 md:pb-8 space-y-6">
+
+        <!-- Tab Controls -->
+        <div
+            class="grid grid-cols-5 gap-1 bg-slate-900 p-1.5 rounded-2xl border border-slate-800 text-[11px] sm:text-xs">
+            <button id="tabRecordBtn" onclick="switchTab('record')"
+                class="flex flex-col sm:flex-row items-center justify-center gap-1 py-2 sm:py-2.5 rounded-xl font-medium transition bg-emerald-600 text-white shadow">
+                <i class="fa-solid fa-stopwatch text-sm"></i>
+                <span>筋トレ</span>
+            </button>
+            <button id="tabCalendarBtn" onclick="switchTab('calendar')"
+                class="flex flex-col sm:flex-row items-center justify-center gap-1 py-2 sm:py-2.5 rounded-xl font-medium transition text-slate-400 hover:text-white">
+                <i class="fa-solid fa-calendar-days text-sm"></i>
+                <span>カレンダー</span>
+            </button>
+            <button id="tabProjectBtn" onclick="switchTab('project')"
+                class="flex flex-col sm:flex-row items-center justify-center gap-1 py-2 sm:py-2.5 rounded-xl font-medium transition text-slate-400 hover:text-white">
+                <i class="fa-solid fa-calendar-check text-sm"></i>
+                <span>10週メニュー</span>
+            </button>
+            <button id="tabHistoryBtn" onclick="switchTab('history')"
+                class="flex flex-col sm:flex-row items-center justify-center gap-1 py-2 sm:py-2.5 rounded-xl font-medium transition text-slate-400 hover:text-white">
+                <i class="fa-solid fa-chart-line text-sm"></i>
+                <span>履歴 (<span id="historyCount">0</span>)</span>
+            </button>
+            <button id="tabExercisesBtn" onclick="switchTab('exercises')"
+                class="flex flex-col sm:flex-row items-center justify-center gap-1 py-2 sm:py-2.5 rounded-xl font-medium transition text-slate-400 hover:text-white">
+                <i class="fa-solid fa-list-check text-sm"></i>
+                <span>種目管理</span>
+            </button>
+        </div>
+
+        <section id="sectionRecord" class="space-y-6">
+
+            <!-- Ladder & Workout Config Card -->
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 md:p-6 shadow-xl space-y-5">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+                    <div>
+                        <h2 class="text-base font-bold text-white flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                            セッション設定
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-0.5">トレーニング種目とプロトコルを選択</p>
+                    </div>
+
+                    <div class="inline-flex rounded-xl bg-slate-800 p-1 text-xs">
+                        <button id="protoLadderBtn" onclick="setProtocol('ladder')"
+                            class="px-3 py-1 rounded-lg bg-emerald-600 text-white font-medium transition">ストレートラダー</button>
+                        <button id="protoStandardBtn" onclick="setProtocol('standard')"
+                            class="px-3 py-1 rounded-lg text-slate-400 hover:text-white font-medium transition">セット式
+                            (自由)</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <!-- Exercise Selector -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1.5">種目 (マーク・ローレン エクササイズ)</label>
+                        <div class="flex gap-2">
+                            <select id="exerciseSelect" onchange="onExerciseChange()"
+                                class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500">
+                                <!-- Dynamically populated -->
+                            </select>
+                        </div>
+                        <p id="exerciseCategoryBadge" class="text-[11px] text-slate-500 mt-1 font-mono">分類: プル / 背筋</p>
+                    </div>
+
+                    <!-- Date & Project Week/Day Link -->
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 mb-1.5">実施日</label>
+                            <input type="date" id="workoutDateInput"
+                                class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-400 mb-1">対象週 (Week)</label>
+                                <select id="sessionWeekSelect" onchange="onSessionWeekChange()"
+                                    class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200">
+                                    <option value="1">第1週 (Week 1)</option>
+                                    <option value="2">第2週 (Week 2)</option>
+                                    <option value="3">第3週 (Week 3)</option>
+                                    <option value="4">第4週 (Week 4)</option>
+                                    <option value="5">第5週 (Week 5)</option>
+                                    <option value="6">第6週 (Week 6)</option>
+                                    <option value="7">第7週 (Week 7)</option>
+                                    <option value="8">第8週 (Week 8)</option>
+                                    <option value="9">第9週 (Week 9)</option>
+                                    <option value="10">第10週 (Week 10)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-400 mb-1">対象日 (Day)</label>
+                                <select id="sessionDaySelect"
+                                    class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200">
+                                    <option value="1">1日目 (プッシュ / 複合)</option>
+                                    <option value="2">2日目 (レッグ / コア)</option>
+                                    <option value="3">3日目 (プル / 複合)</option>
+                                    <option value="4">4日目 (コア / レッグ)</option>
+                                    <option value="5">5日目 (スタッパーズ / 起伏期)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 7:30 Ladder Engine & Timer Card -->
+            <div id="ladderTimerCard"
+                class="bg-gradient-to-b from-slate-900 to-slate-950 border border-emerald-500/30 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+
+                <div
+                    class="absolute -right-16 -top-16 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none">
+                </div>
+
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <div
+                            class="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-sm">
+                            <i class="fa-solid fa-stopwatch"></i>
+                        </div>
+                        <span class="text-sm font-semibold tracking-wide text-slate-200">7分30秒 タイムキャップ</span>
+                    </div>
+                    <button onclick="toggleAudio()" id="audioToggleBtn"
+                        class="text-xs flex items-center gap-1.5 text-slate-400 hover:text-emerald-400 bg-slate-800/80 px-2.5 py-1 rounded-lg transition">
+                        <i class="fa-solid fa-volume-high"></i>
+                        <span id="audioStatusText">音ON</span>
+                    </button>
+                </div>
+
+                <!-- Big Timer Display -->
+                <div class="flex flex-col items-center justify-center my-4">
+                    <div id="timerDisplay"
+                        class="text-6xl sm:text-7xl font-mono font-extrabold tracking-tight text-white drop-shadow-md">
+                        07:30
+                    </div>
+                    <div class="w-full max-w-xs mt-3 bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div id="timerProgressBar"
+                            class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300"
+                            style="width: 100%;"></div>
+                    </div>
+                    <p id="timerSubtext" class="text-xs text-slate-400 mt-2">目標: 1回, 2回, 3回... と1段ずつ積み上げ</p>
+                </div>
+
+                <!-- Ladder Stepper Interaction Area -->
+                <div class="bg-slate-950/80 border border-slate-800/90 rounded-2xl p-4 my-5">
+                    <div class="flex items-center justify-between text-xs font-semibold text-slate-400 mb-2">
+                        <span>現在の段数 (Rung)</span>
+                        <span id="ladderTotalRepsText" class="text-emerald-400">総レップ数: 0回</span>
+                    </div>
+
+                    <div class="flex items-center justify-center gap-4">
+                        <button onclick="adjustLadderRung(-1)"
+                            class="w-12 h-12 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center text-lg active:scale-95 transition">
+                            <i class="fa-solid fa-minus"></i>
+                        </button>
+                        <div class="text-center px-4">
+                            <div id="currentRungDisplay" class="text-4xl font-extrabold text-emerald-400 font-mono">1
+                            </div>
+                            <div class="text-[11px] text-slate-400 uppercase tracking-widest mt-0.5">次に行う回数</div>
+                        </div>
+                        <button onclick="adjustLadderRung(1)"
+                            class="w-12 h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center text-lg shadow-lg shadow-emerald-900/40 active:scale-95 transition">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
+
+                    <!-- Quick Ladder Chain Preview -->
+                    <div class="mt-4 pt-3 border-t border-slate-800/80 text-center">
+                        <div class="text-[11px] text-slate-500 mb-1">ラダー進行履歴:</div>
+                        <div id="ladderChainList"
+                            class="flex flex-wrap items-center justify-center gap-1.5 text-xs text-slate-300 font-mono">
+                            <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-400">未記録</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Timer Controls -->
+                <div class="grid grid-cols-3 gap-2">
+                    <button id="startTimerBtn" onclick="toggleTimer()"
+                        class="col-span-2 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-950 transition active:scale-[0.98]">
+                        <i class="fa-solid fa-play" id="startBtnIcon"></i>
+                        <span id="startBtnText">スタート (7:30)</span>
+                    </button>
+                    <button onclick="resetTimer()"
+                        class="py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-sm transition">
+                        <i class="fa-solid fa-rotate-left mr-1"></i> リセット
+                    </button>
+                </div>
+
+            </div>
+
+            <!-- Logging Detail & Final Reps -->
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 md:p-6 shadow-xl space-y-4">
+                <h3 class="text-sm font-bold text-slate-200 flex items-center gap-2">
+                    <i class="fa-solid fa-clipboard-check text-emerald-400"></i>
+                    記録内容・結果サマリー
+                </h3>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5">
+                        <label class="text-xs text-slate-400 font-medium block mb-1">到達した最大段数</label>
+                        <div class="flex items-center gap-2">
+                            <input type="number" id="finalRungInput" min="0" value="0"
+                                class="w-full bg-transparent text-2xl font-bold font-mono text-emerald-400 focus:outline-none">
+                            <span class="text-xs text-slate-400">段</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5">
+                        <label class="text-xs text-slate-400 font-medium block mb-1">計算された合計レップ数</label>
+                        <div class="flex items-center gap-2">
+                            <input type="number" id="totalRepsInput" min="0" value="0"
+                                class="w-full bg-transparent text-2xl font-bold font-mono text-teal-300 focus:outline-none">
+                            <span class="text-xs text-slate-400">回</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between">
+                        <label class="text-xs text-slate-400 font-medium block mb-1">7:30制限時間ステータス</label>
+                        <div class="flex items-center justify-between">
+                            <span id="timeStatusLabel" class="text-xs font-semibold text-amber-400">時間内未終了 / 中断</span>
+                            <input type="checkbox" id="completedWithinTimeCheckbox"
+                                class="w-5 h-5 accent-emerald-500 rounded cursor-pointer"
+                                onchange="updateTimeStatusLabel()">
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">メモ (フォーム、疲労感、次回への課題など)</label>
+                    <input type="text" id="workoutNoteInput" placeholder="例: 6段目の最後でフォームが崩れた。次はテンポを意識。"
+                        class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500">
+                </div>
+
+                <button onclick="saveWorkoutRecord()"
+                    class="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm shadow-xl shadow-emerald-950 flex items-center justify-center gap-2 transition active:scale-[0.99]">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <span>このワークアウトを保存する</span>
+                </button>
+            </div>
+
+        </section>
+
+        <!-- Calendar & Program Schedule Section -->
+        <section id="sectionCalendar" class="space-y-6 hidden">
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 md:p-6 shadow-xl space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                    <div>
+                        <h2 class="text-base font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-calendar-days text-emerald-400"></i>
+                            プログラム進行スケジュール
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-0.5">開始日と現在の週数、休養期間までのロードマップ</p>
+                    </div>
+                    <button onclick="openNewProjectModal()"
+                        class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition active:scale-95">
+                        <i class="fa-solid fa-pen-to-square mr-1 text-emerald-400"></i> プログラム切替 / 編集
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div class="bg-slate-950 border border-slate-800/90 p-3 rounded-2xl">
+                        <span class="text-[10px] text-slate-400 uppercase font-semibold block">プログラム開始日</span>
+                        <div id="calendarStartDateText" class="text-sm font-bold text-emerald-400 font-mono mt-0.5">-
+                        </div>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800/90 p-3 rounded-2xl">
+                        <span class="text-[10px] text-slate-400 uppercase font-semibold block">今日（現在地）</span>
+                        <div id="calendarCurrentWeekBadge" class="text-sm font-bold text-teal-300 font-mono mt-0.5">Week
+                            1 (1週目)</div>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800/90 p-3 rounded-2xl">
+                        <span class="text-[10px] text-slate-400 uppercase font-semibold block">経過日数</span>
+                        <div id="calendarElapsedDaysText" class="text-sm font-bold text-white font-mono mt-0.5">Day 1 /
+                            70</div>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800/90 p-3 rounded-2xl">
+                        <span class="text-[10px] text-slate-400 uppercase font-semibold block">次回休養期(2〜3週)まで</span>
+                        <div id="calendarDaysUntilRestText" class="text-sm font-bold text-amber-300 font-mono mt-0.5">あと
+                            70日</div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-3.5 space-y-2">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-slate-300 font-medium">10週間の全体進行 (計70日間)</span>
+                        <span id="calendarPercentText" class="text-emerald-400 font-mono font-bold">0% 経過</span>
+                    </div>
+                    <div class="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden border border-slate-800">
+                        <div id="calendarProgressBar"
+                            class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500"
+                            style="width: 0%;"></div>
+                    </div>
+                    <div class="flex justify-between text-[10px] text-slate-500 pt-0.5">
+                        <span>🚩 開始 (Week 1)</span>
+                        <span>Week 5 (中間)</span>
+                        <span>Week 10 (ピーク)</span>
+                        <span>💤 休養期 (2〜3週)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mobile-First Monthly Calendar Card -->
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-xl space-y-4">
+                <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                    <div class="flex items-center gap-2">
+                        <button onclick="changeCalendarMonth(-1)"
+                            class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center transition active:scale-90">
+                            <i class="fa-solid fa-chevron-left text-xs"></i>
+                        </button>
+                        <h3 id="calendarMonthTitle" class="text-base font-bold text-white font-mono px-2">2026年 9月</h3>
+                        <button onclick="changeCalendarMonth(1)"
+                            class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center transition active:scale-90">
+                            <i class="fa-solid fa-chevron-right text-xs"></i>
+                        </button>
+                    </div>
+                    <button onclick="goToCurrentMonth()"
+                        class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-semibold transition active:scale-95">
+                        今月へ
+                    </button>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 px-1">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                        <span>筋トレ実施日</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded border border-emerald-400 bg-emerald-500/20"></span>
+                        <span>今日</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span
+                            class="w-2.5 h-2.5 rounded bg-blue-500/30 text-blue-300 flex items-center justify-center text-[9px] font-bold">W</span>
+                        <span>プログラム週表示 (W1〜W10)</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded bg-purple-500/30"></span>
+                        <span>休養期 (Week 11〜13)</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-7 gap-1 text-center font-bold text-xs text-slate-400 py-1">
+                    <div class="text-rose-400">日</div>
+                    <div>月</div>
+                    <div>火</div>
+                    <div>水</div>
+                    <div>木</div>
+                    <div>金</div>
+                    <div class="text-sky-400">土</div>
+                </div>
+
+                <div id="calendarGrid" class="grid grid-cols-7 gap-1"></div>
+
+                <div id="calendarDayDetailsCard"
+                    class="bg-slate-950 border border-slate-800 rounded-2xl p-4 hidden space-y-2">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span id="selectedDayDateDisplay" class="font-bold text-sm text-white font-mono">-</span>
+                            <span id="selectedDayWeekBadge"
+                                class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-emerald-400 font-mono font-semibold">-</span>
+                        </div>
+                        <button onclick="startSessionForDate()"
+                            class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-3 py-1 rounded-xl transition active:scale-95">
+                            この日で筋トレ記録
+                        </button>
+                    </div>
+                    <div id="selectedDayLogsContainer" class="space-y-2 text-xs text-slate-300"></div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- 10-Week Project Section -->
+        <section id="sectionProject" class="space-y-6 hidden">
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 md:p-6 shadow-xl space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                    <div>
+                        <h2 class="text-base font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-layer-group text-emerald-400"></i>
+                            プログラム管理 (10週間サイクル)
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-0.5">
+                            10週間の集中トレーニングと2〜3週間の休養（アクティブリカバリー）を1プログラムとして管理
+                        </p>
+                    </div>
+                    <button onclick="openNewProjectModal()"
+                        class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow transition">
+                        <i class="fa-solid fa-plus mr-1"></i> 新規プログラム開始
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="bg-slate-950 border border-slate-800 p-3 rounded-2xl">
+                        <span class="text-[11px] text-slate-400 block mb-1">現在のプログラム</span>
+                        <select id="projectSelector" onchange="onProjectSelectChange()"
+                            class="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-100 font-semibold focus:outline-none">
+                        </select>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800 p-3 rounded-2xl">
+                        <span class="text-[11px] text-slate-400 block mb-1">サイクル開始日</span>
+                        <div id="projectStartDateDisplay" class="text-sm font-bold text-slate-200 font-mono mt-0.5">-
+                        </div>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800 p-3 rounded-2xl">
+                        <span class="text-[11px] text-slate-400 block mb-1">完了ステータス</span>
+                        <div id="projectStatusBadge"
+                            class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            進行中
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-3">
+                    <div class="flex items-center justify-between text-xs font-semibold text-slate-300 mb-2">
+                        <span>10週間ロードマップ進捗 (全40セッション)</span>
+                        <span id="projectProgressPercent" class="text-emerald-400 font-mono">0% 完了</span>
+                    </div>
+                    <div class="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden border border-slate-800">
+                        <div id="projectProgressBar"
+                            class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500"
+                            style="width: 0%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 10-Week Structured Menu List -->
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 md:p-6 shadow-xl space-y-5">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-list-ol text-emerald-400"></i>
+                            マーク・ローレン 10週間カリキュラム
+                        </h3>
+                        <p class="text-xs text-slate-400">各週のプロトコルと分割メニュー。「セッション開始」でタイマーへ即時読み込みます。</p>
+                    </div>
+                    <div class="text-xs text-slate-400 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+                        ※ 10週終了後は <strong class="text-emerald-400">2〜3週間の休養期</strong> を取って新プログラムへ
+                    </div>
+                </div>
+
+                <div id="weeksCurriculumContainer" class="space-y-3"></div>
+            </div>
+        </section>
+
+        <!-- 10-Week Completion Congratulations Banner -->
+        <div id="projectCompletionBanner"
+            class="hidden bg-gradient-to-r from-emerald-900/60 via-teal-900/40 to-slate-900 border border-emerald-500/40 rounded-3xl p-6 shadow-2xl space-y-3">
+            <div class="flex items-center gap-3">
+                <div
+                    class="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-2xl">
+                    <i class="fa-solid fa-trophy"></i>
+                </div>
+                <div>
+                    <h3 class="text-base font-bold text-white">10週間プログラム 完走おめでとうございます！🎉</h3>
+                    <p class="text-xs text-emerald-300">
+                        マーク・ローレンの原則に従い、ここで<strong>2〜3週間の休養（アクティブリカバリー）期間</strong>を挟みましょう。</p>
+                </div>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed">
+                休養期間中はウォーキングや軽いストレッチ等で疲労を抜き、次のレベル（あるいは同じレベルでの記録更新）に備えましょう。
+            </p>
+            <div class="pt-1 flex gap-2">
+                <button onclick="openNewProjectModal()"
+                    class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow transition active:scale-95">
+                    <i class="fa-solid fa-flag-checkered mr-1"></i> 次の10週間プログラムを開始する
+                </button>
+            </div>
+        </div>
+
+        <section id="sectionHistory" class="space-y-4 hidden">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h2 class="text-base font-bold text-white">ワークアウト履歴</h2>
+                    <p class="text-xs text-slate-400">過去の成果とラダー推移</p>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <select id="filterExerciseSelect" onchange="renderHistoryList()"
+                        class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200">
+                        <option value="ALL">すべての種目</option>
+                    </select>
+                    <button onclick="exportLogsJson()"
+                        class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700">
+                        <i class="fa-solid fa-file-export mr-1"></i> JSON出力
+                    </button>
+                </div>
+            </div>
+
+            <div id="historyListContainer" class="space-y-3"></div>
+        </section>
+
+        <section id="sectionExercises" class="space-y-6 hidden">
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 md:p-6 shadow-xl space-y-4">
+                <h2 class="text-base font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-book-open text-emerald-400"></i>
+                    マーク・ローレン種目ライブラリ
+                </h2>
+                <p class="text-xs text-slate-400">
+                    『マッスルエリート養成バイブル』の4大分類（プル / プッシュ / レッグ / コア）に沿って管理。
+                </p>
+
+                <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
+                    <div class="text-xs font-bold text-emerald-400 uppercase tracking-wider">カスタム種目を追加</div>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <input type="text" id="newExerciseName" placeholder="種目名 (例: ドア懸垂)"
+                            class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500">
+                        <select id="newExerciseCategory"
+                            class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100">
+                            <option value="プル (Pull/背筋)">プル (Pull/背筋)</option>
+                            <option value="プッシュ (Push/胸・三頭)">プッシュ (Push/胸・三頭)</option>
+                            <option value="レッグ (Legs/下半身)">レッグ (Legs/下半身)</option>
+                            <option value="コア (Core/体幹)">コア (Core/体幹)</option>
+                            <option value="全身 (Full Body)">全身 (Full Body)</option>
+                        </select>
+                        <button onclick="addNewCustomExercise()"
+                            class="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold py-2 px-3 transition">
+                            <i class="fa-solid fa-plus mr-1"></i> 追加
+                        </button>
+                    </div>
+                </div>
+
+                <div id="exerciseLibraryList" class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2"></div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Auth Modal (Login & Name Input) -->
+    <div id="authModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-user-shield text-emerald-400"></i>
+                    アカウント ログイン
+                </h3>
+                <button onclick="closeAuthModal()" class="text-slate-400 hover:text-white text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <p class="text-xs text-slate-400">
+                登録済みのメールアドレスとパスワードを入力してください。お名前（表示名）は画面上に表示・保存されます。
+            </p>
+
+            <form onsubmit="handleAuthSubmit(event)" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">
+                        お名前（表示名）
+                        <span class="text-[10px] text-slate-400 font-normal">※例: ミシェル（未入力時は既存名を維持）</span>
+                    </label>
+                    <input type="text" id="authNameInput" placeholder="ミシェル"
+                        class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">メールアドレス</label>
+                    <input type="email" id="authEmailInput" required placeholder="user@example.com"
+                        class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 font-mono">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">パスワード</label>
+                    <input type="password" id="authPasswordInput" required minlength="6" placeholder="••••••••"
+                        class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 font-mono">
+                </div>
+
+                <div id="authErrorBanner"
+                    class="hidden p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2">
+                    <i class="fa-solid fa-circle-exclamation shrink-0"></i>
+                    <span id="authErrorMessage"></span>
+                </div>
+
+                <button type="submit" id="authSubmitBtn"
+                    class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow transition active:scale-98 mt-2">
+                    <span>ログインする</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Supabase Settings Modal -->
+    <div id="supabaseModal"
+        class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-cloud text-emerald-400"></i>
+                    Supabase 接続設定
+                </h3>
+                <button onclick="closeSupabaseModal()" class="text-slate-400 hover:text-white text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <p class="text-xs text-slate-400 leading-relaxed">
+                SupabaseのProject URLとanon keyを入力すると、ワークアウト履歴とプログラム進捗がクラウド上に同期・保存されます。
+            </p>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Project URL</label>
+                    <input type="url" id="supabaseUrlInput" placeholder="https://xxxxxxxx.supabase.co"
+                        class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 font-mono">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Anon / Public API Key</label>
+                    <input type="password" id="supabaseKeyInput" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                        class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 font-mono">
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2">
+                <button onclick="clearSupabaseConfig()"
+                    class="px-3 py-2 rounded-xl text-xs bg-slate-800 text-rose-400 hover:bg-slate-700 font-semibold transition">設定解除</button>
+                <div class="flex items-center gap-2">
+                    <button onclick="closeSupabaseModal()"
+                        class="px-4 py-2 rounded-xl text-xs bg-slate-800 text-slate-300 hover:bg-slate-700 font-semibold transition">閉じる</button>
+                    <button onclick="saveSupabaseConfig()"
+                        class="px-4 py-2 rounded-xl text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow transition">接続して保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Project Modal -->
+    <div id="newProjectModal"
+        class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-flag-checkered text-emerald-400"></i>
+                    10週間プログラムの作成
+                </h3>
+                <button onclick="closeNewProjectModal()" class="text-slate-400 hover:text-white text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <p class="text-xs text-slate-400 leading-relaxed">
+                マーク・ローレンのカリキュラムは本人のレベルに応じた4段階で構成されています。あなたの現在地に合わせて選択してください。
+            </p>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">プログラム名</label>
+                    <input type="text" id="newProjectTitleInput" placeholder="例: 第1期 マスタークラス挑戦"
+                        class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">トレーニングレベル</label>
+                    <select id="newProjectLevelSelect"
+                        class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500">
+                        <option value="basic">① ベーシックプログラム (初心者向け)</option>
+                        <option value="first_class">② 1stクラスプログラム (中級者向け)</option>
+                        <option value="master_class" selected>③ マスタークラスプログラム (上級者向け)</option>
+                        <option value="chief_class">④ チーフクラスプログラム (エリート向け)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">プログラム開始日</label>
+                    <input type="date" id="newProjectStartDateInput"
+                        class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500">
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2">
+                <button id="cancelProjectModalBtn" onclick="closeNewProjectModal()"
+                    class="px-4 py-2 rounded-xl text-xs bg-slate-800 text-slate-300 hover:bg-slate-700 font-semibold">キャンセル</button>
+                <button onclick="createProject()"
+                    class="px-4 py-2 rounded-xl text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow">プログラム開始</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Box -->
+    <div id="toastNotification"
+        class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-emerald-600 text-white text-xs font-medium px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2 pointer-events-none">
+        <i class="fa-solid fa-circle-check"></i>
+        <span id="toastMessage">保存しました</span>
+    </div>
+
+    <script>
+        /* ==========================================================
+           Default Data & Exercises (Mark Lauren Style)
+        ========================================================== */
+        const DEFAULT_EXERCISES = [
+            {id: 'let-me-in', name: 'レトミアン (Let Me Ins / ドア懸垂)', category: 'プル (Pull/背筋)'},
+            {id: 'let-me-up', name: 'レトミアプ (Let Me Ups / 水平懸垂)', category: 'プル (Pull/背筋)'},
+            {id: 'classic-pushup', name: 'クラシック・プッシュアップ', category: 'プッシュ (Push/胸・三頭)'},
+            {id: 'military-press', name: 'ミリタリー・プレス (倒立プッシュ)', category: 'プッシュ (Push/胸・三頭)'},
+            {id: 'squat', name: 'ワンレッグ・スクワット / ピストル', category: 'レッグ (Legs/下半身)'},
+            {id: 'lunge', name: 'バックランジ & キック', category: 'レッグ (Legs/下半身)'},
+            {id: 'swimmer', name: 'スイマー (脊柱起立筋)', category: 'コア (Core/体幹)'},
+            {id: 'beat-the-boots', name: 'ビート・ザ・ブーツ (腹筋)', category: 'コア (Core/体幹)'}
+        ];
+
+        let customExercises = [];
+        let workoutLogs = [];
+
+        // Ladder & Timer State
+        const TARGET_TIME = 450; // 7分30秒 = 450秒
+        let timerRemaining = TARGET_TIME;
+        let timerInterval = null;
+        let isTimerRunning = false;
+        let isSoundEnabled = true;
+        let currentLadderRung = 1;
+        let ladderSequence = [1];
+        let currentProtocol = 'ladder';
+
+        // Supabase Configuration
+        const DEFAULT_SUPABASE_URL = 'https://xytnuhgqohrmhxfkemnw.supabase.co';
+        const DEFAULT_SUPABASE_KEY = 'sb_publishable_dIv6olmFEQZ8ZJ5vmbM_iA_7ijkc2ee';
+        let supabaseClient = null;
+        let currentUser = null;
+        let currentUserName = null;
+
+        // Calendar State
+        let calendarCurrentYear = new Date().getFullYear();
+        let calendarCurrentMonth = new Date().getMonth();
+        let selectedCalendarDate = null;
+
+        /* ==========================================================
+           Mark Lauren 4 Levels Detailed Curriculum Database
+        ========================================================== */
+        const LEVEL_CURRICULUMS = {
+            master_class: [
+                {
+                    week: 1, block: '筋持久力ブロック (ラダー)', protocol: 'ladder',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ/プル', exercises: ['左右交互に行うワンアーム・プッシュアップ (両手を高い位置)', 'ドア・プルアップ (ネガティブのみ)', 'ミリタリープレス (両足を高い位置)', 'レット・ミー・アップ']},
+                        {day: 2, name: '2日目: レッグ/コア', exercises: ['左右交互に行うワンレッグ・スクワット (対象物あり/なし)', '左右交互に行うバックランジ (ボトム6秒静止)', 'ヒップ・エクステンション', 'スーパーマン']},
+                        {day: 3, name: '3日目: プッシュ/プル', exercises: ['左右交互に行うワンアーム・プッシュアップ (両手を高い位置)', 'ドア・プルアップ (ネガティブのみ)', 'ミリタリー・プレス', 'レット・ミー・イン']},
+                        {day: 4, name: '4日目: レッグ/コア', exercises: ['左右交互に行うワンレッグ・スクワット (対象物あり/なし)', '左右交互に行うサイドランジ (ボトム3秒静止)', '左右交互に行うワンレッグ・ルーマニアン・デッドリフト', 'アイアンクロス (膝を曲げて)']}
+                    ]
+                },
+                {
+                    week: 2, block: '筋持久力ブロック (ラダー)', protocol: 'ladder',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ/プル', exercises: ['左右交互に行うワンアーム・プッシュアップ', 'ドア・プルアップ', 'ミリタリープレス (高足)', 'レット・ミー・アップ']},
+                        {day: 2, name: '2日目: レッグ/コア', exercises: ['左右交互ワンレッグ・スクワット', 'バックランジ (6秒静止)', 'ヒップ・エクステンション', 'スーパーマン']},
+                        {day: 3, name: '3日目: プッシュ/プル', exercises: ['左右交互ワンアーム・プッシュアップ', 'ドア・プルアップ', 'ミリタリー・プレス', 'レット・ミー・イン']},
+                        {day: 4, name: '4日目: レッグ/コア', exercises: ['ワンレッグ・スクワット', 'サイドランジ (3秒静止)', 'ワンレッグ・ルーマニアン・デッドリフト', 'アイアンクロス']}
+                    ]
+                },
+                {
+                    week: 3, block: '筋力ブロック (インターバルセット)', protocol: 'standard',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ', exercises: ['ワンアーム・プッシュアップ (両手を高い位置)', 'ハンドスタンド・プッシュアップ', 'ダイブボンバー', 'サーフェイス・トリセップ・エクステンション']},
+                        {day: 2, name: '2日目: レッグ', exercises: ['ワンレッグ・スクワット', 'ブルガリアン・スプリット・スクワット (ボトム6秒静止)', 'サイドランジ (ボトム6秒静止)', 'ワンレッグ・ヒップ・エクステンション']},
+                        {day: 3, name: '3日目: プル', exercises: ['ドア・プルアップ', 'レット・ミー・イン (トップ1〜3秒静止)', 'レット・ミー・アップ', 'レット・ミー・アップ (リバースグリップ)']},
+                        {day: 4, name: '4日目: コア', exercises: ['ハンギング・レッグリフト (水平まで)', 'ピローハンパー', 'Vアップ', 'スーパーマン']}
+                    ]
+                },
+                {
+                    week: 4, block: '筋力ブロック (インターバルセット)', protocol: 'standard',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ', exercises: ['ワンアーム・プッシュアップ', 'ハンドスタンド・プッシュアップ', 'ダイブボンバー', 'サーフェイス・トリセップ・エクステンション']},
+                        {day: 2, name: '2日目: レッグ', exercises: ['ワンレッグ・スクワット', 'ブルガリアン・スプリット・スクワット', 'サイドランジ', 'ワンレッグ・ヒップ・エクステンション']},
+                        {day: 3, name: '3日目: プル', exercises: ['ドア・プルアップ', 'レット・ミー・イン', 'レット・ミー・アップ', 'レット・ミー・アップ (リバースグリップ)']},
+                        {day: 4, name: '4日目: コア', exercises: ['ハンギング・レッグリフト', 'ピローハンパー', 'Vアップ', 'スーパーマン']}
+                    ]
+                },
+                {
+                    week: 5, block: 'パワーブロック (スーパーセット)', protocol: 'standard',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ', exercises: ['ワンアーム・プッシュアップ & バウンチング・プッシュアップ', 'ミリタリープレス (高足) & ダイブボンバー', 'サーフェイス・トリセップ・エクステンション & ショーブ・オフ']},
+                        {day: 2, name: '2日目: レッグ', exercises: ['ピストル & ボックス・ジャンプ', 'シシーススクワット & アイアンマイク', 'ハムサンドウィッチ & サイドジャンプ']},
+                        {day: 3, name: '3日目: プル', exercises: ['ドア・プルアップ & レット・ミー・アップ', 'ワンアーム・レット・ミー・イン & レット・ミー・アップ (リバース)', 'レット・ミー・イン (リバース/静止) & タオルカール']},
+                        {day: 4, name: '4日目: コア', exercises: ['ハンギング・レッグリフト & バイシクル', 'ピローハンパー & スーパーマン', 'Vアップ & アイアンクロス (膝曲げ)']}
+                    ]
+                },
+                {
+                    week: 6, block: 'パワーブロック (スーパーセット)', protocol: 'standard',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ', exercises: ['ワンアーム・プッシュアップ & バウンチング・プッシュアップ', 'ミリタリープレス & ダイブボンバー', 'サーフェイス・トリセップ & ショーブ・オフ']},
+                        {day: 2, name: '2日目: レッグ', exercises: ['ピストル & ボックス・ジャンプ', 'シシーススクワット & アイアンマイク', 'ハムサンドウィッチ & サイドジャンプ']},
+                        {day: 3, name: '3日目: プル', exercises: ['ドア・プルアップ & レット・ミー・アップ', 'ワンアーム・レット・ミー・イン & レット・ミー・アップ', 'レット・ミー・イン & タオルカール']},
+                        {day: 4, name: '4日目: コア', exercises: ['ハンギング・レッグリフト & バイシクル', 'ピローハンパー & スーパーマン', 'Vアップ & アイアンクロス']}
+                    ]
+                },
+                {
+                    week: 7, block: '起伏ブロック (7週目)', protocol: 'mixed',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ (ラダー)', exercises: ['ワンアーム・プッシュアップ (膝高)', 'ダイブボンバー', 'ディップ', 'シーティド・ディップ']},
+                        {day: 2, name: '2日目: レッグ (スーパーセット)', exercises: ['ピストル & シシースクワット', 'ボックス・ジャンプ & アイアンマイク', 'ハムサンドウィッチ & サイドジャンプ']},
+                        {day: 3, name: '3日目: プル (インターバルセット)', exercises: ['ドア・プルアップ (トップ静止)', 'レット・ミー・イン (静止)', 'レット・ミー・アップ', 'レット・ミー・アップ (リバース)']},
+                        {day: 4, name: '4日目: コア (タバタ)', exercises: ['サイドVアップ', 'フラッター・キック', 'スクワット']},
+                        {day: 5, name: '5日目: 全身 (スタッパーズ)', exercises: ['左右交互ピストル (各6レップ計12)', 'ボックス・ジャンプ (12レップ)', 'ダイブボンバー (6レップ)', 'レット・ミー・アップ (8レップ)']}
+                    ]
+                },
+                {
+                    week: 8, block: '起伏ブロック (8週目)', protocol: 'mixed',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ (タバタ)', exercises: ['プッシュアップ', 'ショーブ・オフ', 'スクワット']},
+                        {day: 2, name: '2日目: レッグ (ラダー)', exercises: ['ワンレッグ・スクワット', 'シシーススクワット', 'サイドランジ (ボトム静止)', 'ヒップ・エクステンション']},
+                        {day: 3, name: '3日目: プル (スーパーセット)', exercises: ['ドア・プルアップ & レット・ミー・アップ', 'ワンアーム・レット・ミー・イン & レット・ミー・アップ (リバース/高足)', 'レット・ミー・イン (リバース) & タオルカール']},
+                        {day: 4, name: '4日目: コア (インターバルセット)', exercises: ['ハンギング・レッグリフト (平行)', 'ピローハンパー', 'Vアップ', 'スーパーマン']},
+                        {day: 5, name: '5日目: 全身 (スタッパーズ)', exercises: ['ピストル (計12レップ)', 'ボックス・ジャンプ (12レップ)', 'ダイブボンバー (6レップ)', 'レット・ミー・アップ (8レップ)']}
+                    ]
+                },
+                {
+                    week: 9, block: '起伏ブロック (9週目)', protocol: 'mixed',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ (インターバルセット)', exercises: ['ワンアーム・プッシュアップ (高手)', 'ダイブボンバー', 'ミリタリープレス (高足)', 'ディップ']},
+                        {day: 2, name: '2日目: レッグ (タバタ)', exercises: ['アイアンマイク', 'サイドジャンプ', 'スクワット']},
+                        {day: 3, name: '3日目: プル (ラダー)', exercises: ['ドア・プルアップ', 'レット・ミー・アップ', 'レット・ミー・アップ (リバース)', 'レット・ミー・イン']},
+                        {day: 4, name: '4日目: コア (スーパーセット)', exercises: ['ハンギング・レッグリフト & バイシクル', 'ピローハンパー & スーパーマン', 'Vアップ & アイアンクロス (膝曲げ)']},
+                        {day: 5, name: '5日目: 全身 (スタッパーズ)', exercises: ['ピストル (計12レップ)', 'ボックス・ジャンプ (12レップ)', 'ダイブボンバー (6レップ)', 'レット・ミー・アップ (8レップ)']}
+                    ]
+                },
+                {
+                    week: 10, block: '起伏ブロック (10週目 / 最終ピーク)', protocol: 'mixed',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ (スーパーセット)', exercises: ['ワンアーム・プッシュアップ & バウンチング・プッシュアップ', 'ミリタリープレス (高足) & ダイブボンバー', 'サーフェイス・トリセップ・エクステンション & ショーブ・オフ']},
+                        {day: 2, name: '2日目: レッグ (インターバルセット)', exercises: ['ワンレッグ・スクワット', 'ブルガリアン・スプリット・スクワット (静止)', 'サイドランジ (静止)', 'ワンレッグ・ヒップ・エクステンション']},
+                        {day: 3, name: '3日目: プル (タバタ)', exercises: ['ドア・プルアップ', 'レット・ミー・アップ', 'レット・ミー・イン', 'マウンテン・クライマー']},
+                        {day: 4, name: '4日目: コア (ラダー)', exercises: ['サイドVアップ (脚曲げ)', 'バムバムズ', 'レッグリフト (胸手)', 'ハイパーエクステンション']},
+                        {day: 5, name: '5日目: 全身 (スタッパーズ)', exercises: ['ピストル (計12レップ)', 'ボックス・ジャンプ (12レップ)', 'ダイブボンバー (6レップ)', 'レット・ミー・アップ (8レップ)']}
+                    ]
+                }
+            ],
+            chief_class: [
+                {
+                    week: 1, block: '筋持久力ブロック (ラダー)', protocol: 'ladder',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ/プル', exercises: ['左右交互に行うワンアーム・プッシュアップ (高足)', 'ドア・プルアップ', 'ダイブボンバー', 'レット・ミー・アップ (両足を高い位置)']},
+                        {day: 2, name: '2日目: レッグ/コア', exercises: ['左右交互に行うピストル', 'アイアンマイク', '左右交互ワンレッグ・ヒップ・エクステンション', 'ピローハンパー']},
+                        {day: 3, name: '3日目: プッシュ/プル', exercises: ['左右交互ワンアーム・プッシュアップ (高足)', 'ドア・プルアップ', 'ミリタリープレス (両足を高い位置)', '左右交互ワンアーム・レット・ミー・イン']},
+                        {day: 4, name: '4日目: レッグ/コア', exercises: ['左右交互ワンレッグ・スクワット', 'ボックス・ジャンプ', 'シシースクワット', 'アイアンクロス']}
+                    ]
+                },
+                {
+                    week: 2, block: '筋持久力ブロック (ラダー)', protocol: 'ladder',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ/プル', exercises: ['左右交互ワンアーム・プッシュアップ', 'ドア・プルアップ', 'ダイブボンバー', 'レット・ミー・アップ (高足)']},
+                        {day: 2, name: '2日目: レッグ/コア', exercises: ['左右交互ピストル', 'アイアンマイク', 'ワンレッグ・ヒップ・エクステンション', 'ピローハンパー']},
+                        {day: 3, name: '3日目: プッシュ/プル', exercises: ['左右交互ワンアーム・プッシュアップ', 'ドア・プルアップ', 'ミリタリープレス (高足)', 'ワンアーム・レット・ミー・イン']},
+                        {day: 4, name: '4日目: レッグ/コア', exercises: ['ワンレッグ・スクワット', 'ボックス・ジャンプ', 'シシースクワット', 'アイアンクロス']}
+                    ]
+                },
+                {
+                    week: 3, block: '筋力ブロック (インターバルセット)', protocol: 'standard',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ', exercises: ['ワンアーム・プッシュアップ', 'ハンドスタンド・プッシュアップ', 'ダイブボンバー', 'サーフェイス・トリセップ・エクステンション']},
+                        {day: 2, name: '2日目: レッグ', exercises: ['ピストル', 'ブルガリアン・スプリット・スクワット (静止)', 'シシースクワット', 'アイアンマイク']},
+                        {day: 3, name: '3日目: プル', exercises: ['ドア・プルアップ (トップ静止)', 'ワンアーム・レット・ミー・イン', 'レット・ミー・アップ (リバース/高足)', 'レット・ミー・イン (トップ静止)']},
+                        {day: 4, name: '4日目: コア', exercises: ['ハンギング・レッグリフト (頭近くまで)', 'ピローハンパー', 'ジャックナイフ', 'スーパーマン']}
+                    ]
+                },
+                {
+                    week: 4, block: '筋力ブロック (インターバルセット)', protocol: 'standard',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ', exercises: ['ワンアーム・プッシュアップ', 'ハンドスタンド・プッシュアップ', 'ダイブボンバー', 'サーフェイス・トリセップ']},
+                        {day: 2, name: '2日目: レッグ', exercises: ['ピストル', 'ブルガリアン・スプリット・スクワット', 'シシースクワット', 'アイアンマイク']},
+                        {day: 3, name: '3日目: プル', exercises: ['ドア・プルアップ', 'ワンアーム・レット・ミー・イン', 'レット・ミー・アップ', 'レット・ミー・イン']},
+                        {day: 4, name: '4日目: コア', exercises: ['ハンギング・レッグリフト', 'ピローハンパー', 'ジャックナイフ', 'スーパーマン']}
+                    ]
+                },
+                {
+                    week: 5, block: 'パワーブロック (スーパーセット)', protocol: 'standard',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ', exercises: ['ワンアーム・プッシュアップ (高足) & バウンチング・プッシュアップ', 'ハンドスタンド・プッシュアップ (静止) & ダイブボンバー', 'サーフェイス・トリセップ & ショーブ・オフ']},
+                        {day: 2, name: '2日目: レッグ', exercises: ['左右交互ピストル (静止) & ボックス・ジャンプ', 'シシースクワット (静止) & アイアンマイク', 'ハムサンドウィッチ & サイドジャンプ']},
+                        {day: 3, name: '3日目: プル', exercises: ['ドア・プルアップ (静止) & レット・ミー・アップ (高足)', 'ワンアーム・レット・ミー・イン & レット・ミー・アップ (リバース/高足)', 'プルアップ (胸骨当て) & レット・ミー・イン (リバース)']},
+                        {day: 4, name: '4日目: コア', exercises: ['ハンギング・レッグリフト (静止/2秒) & バイシクル', 'ピローハンパー & スーパーマン', 'ジャックナイフ & アイアンクロス']}
+                    ]
+                },
+                {
+                    week: 6, block: 'パワーブロック (スーパーセット)', protocol: 'standard',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ', exercises: ['ワンアーム・プッシュアップ & バウンチング・プッシュアップ', 'ハンドスタンド・プッシュアップ & ダイブボンバー', 'サーフェイス・トリセップ & ショーブ・オフ']},
+                        {day: 2, name: '2日目: レッグ', exercises: ['左右交互ピストル & ボックス・ジャンプ', 'シシースクワット & アイアンマイク', 'ハムサンドウィッチ & サイドジャンプ']},
+                        {day: 3, name: '3日目: プル', exercises: ['ドア・プルアップ & レット・ミー・アップ', 'ワンアーム・レット・ミー・イン & レット・ミー・アップ', 'プルアップ & レット・ミー・イン']},
+                        {day: 4, name: '4日目: コア', exercises: ['ハンギング・レッグリフト & バイシクル', 'ピローハンパー & スーパーマン', 'ジャックナイフ & アイアンクロス']}
+                    ]
+                },
+                {
+                    week: 7, block: '起伏ブロック (7週目)', protocol: 'mixed',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ (ラダー)', exercises: ['ワンアーム・プッシュアップ', 'ハンドスタンド・プッシュアップ', 'ダイブボンバー', 'ディップ (静止)']},
+                        {day: 2, name: '2日目: レッグ (スーパーセット)', exercises: ['左右交互ピストル (静止) & ボックス・ジャンプ', 'シシースクワット (静止) & アイアンマイク', 'ハムサンドウィッチ & サイドジャンプ']},
+                        {day: 3, name: '3日目: プル (インターバルセット)', exercises: ['ドア・プルアップ (静止)', 'ワンアーム・レット・ミー・イン', 'レット・ミー・アップ (リバース/高足)', 'レット・ミー・イン (リバース/静止)']},
+                        {day: 4, name: '4日目: コア (タバタ)', exercises: ['Vアップ', 'サイドVアップ', 'マウンテン・クライマー', 'スクワット']},
+                        {day: 5, name: '5日目: 全身 (スタッパーズ)', exercises: ['左右交互ピストル (各6計12レップ)', 'アイアンマイク (24レップ)', 'ハンドスタンド・プッシュアップ (6レップ)', 'ドア・プルアップ (8レップ)']}
+                    ]
+                },
+                {
+                    week: 8, block: '起伏ブロック (8週目)', protocol: 'mixed',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ (タバタ)', exercises: ['プッシュアップ', 'ショーブ・オフ', 'マウンテン・クライマー', 'バーピー']},
+                        {day: 2, name: '2日目: レッグ (ラダー)', exercises: ['ワンレッグ・スクワット', 'シシースクワット', 'アイアンマイク', 'ワンレッグ・ヒップ・エクステンション']},
+                        {day: 3, name: '3日目: プル (スーパーセット)', exercises: ['ドア・プルアップ (静止) & レット・ミー・アップ (高足)', 'ワンアーム・レット・ミー・イン & レット・ミー・アップ (リバース/高足)', 'プルアップ (胸骨当て) & レット・ミー・イン (リバース)']},
+                        {day: 4, name: '4日目: コア (インターバルセット)', exercises: ['ハンギング・レッグリフト (頭近くまで)', 'ピローハンパー', 'ジャックナイフ', 'スーパーマン']},
+                        {day: 5, name: '5日目: 全身 (スタッパーズ)', exercises: ['左右交互ピストル (計12レップ)', 'アイアンマイク (24レップ)', 'ハンドスタンド・プッシュアップ (6レップ)', 'ドア・プルアップ (8レップ)']}
+                    ]
+                },
+                {
+                    week: 9, block: '起伏ブロック (9週目)', protocol: 'mixed',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ (インターバルセット)', exercises: ['ワンアーム・プッシュアップ', 'ハンドスタンド・プッシュアップ', 'ダイブボンバー', 'サーフェイス・トリセップ']},
+                        {day: 2, name: '2日目: レッグ (タバタ)', exercises: ['アイアンマイク', 'サイドジャンプ', 'スクワット・ツラスト', 'スクワット']},
+                        {day: 3, name: '3日目: プル (ラダー)', exercises: ['ドア・プルアップ', 'レット・ミー・アップ', 'レット・ミー・アップ (リバース)', '左右交互ワンアーム・レット・ミー・イン']},
+                        {day: 4, name: '4日目: コア (スーパーセット)', exercises: ['ハンギング・レッグリフト (静止) & バイシクル', 'ピローハンパー & スーパーマン', 'ジャックナイフ & アイアンクロス']},
+                        {day: 5, name: '5日目: 全身 (スタッパーズ)', exercises: ['左右交互ピストル (計12レップ)', 'アイアンマイク (24レップ)', 'ハンドスタンド・プッシュアップ (6レップ)', 'ドア・プルアップ (8レップ)']}
+                    ]
+                },
+                {
+                    week: 10, block: '起伏ブロック (10週目 / 最終ピーク)', protocol: 'mixed',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ (スーパーセット)', exercises: ['ワンアーム・プッシュアップ (高足) & バウンチング・プッシュアップ', 'ハンドスタンド・プッシュアップ & ダイブボンバー', 'サーフェイス・トリセップ & ショーブ・オフ']},
+                        {day: 2, name: '2日目: レッグ (インターバルセット)', exercises: ['ワンレッグ・スクワット', 'ブルガリアン・スプリット・スクワット (頭上バックパック)', 'アイアンマイク', 'ハムサンドウィッチ']},
+                        {day: 3, name: '3日目: プル (タバタ)', exercises: ['ドア・プルアップ (ネガティブ)', 'レット・ミー・アップ', 'レット・ミー・イン', 'マウンテン・クライマー']},
+                        {day: 4, name: '4日目: コア (ラダー)', exercises: ['ジャックナイフ', 'ピローハンパー', '左右交互サイドVアップ (脚まっすぐ)', 'スーパーマン']},
+                        {day: 5, name: '5日目: 全身 (スタッパーズ)', exercises: ['左右交互ピストル (計12レップ)', 'アイアンマイク (24レップ)', 'ハンドスタンド・プッシュアップ (6レップ)', 'ドア・プルアップ (8レップ)']}
+                    ]
+                }
+            ],
+            first_class: [
+                {
+                    week: 1, block: '筋持久力ブロック (ラダー)', protocol: 'ladder',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ/プル', exercises: ['プッシュアップ', 'レット・ミー・アップ', 'ミリタリープレス', 'レット・ミー・イン']},
+                        {day: 2, name: '2日目: レッグ/コア', exercises: ['左右交互に行うバックランジ (ボトム1〜3秒静止)', '左右交互に行うワンレッグ・ルーマニアン・デッドリフト', 'トヨタ (ボトム1〜3秒静止)', 'ハイパーエクステンション (腕を横に置く)']},
+                        {day: 3, name: '3日目: プッシュ/プル', exercises: ['プッシュアップ', 'レット・ミー・アップ', 'ミリタリー・プレス', 'レット・ミー・イン']},
+                        {day: 4, name: '4日目: レッグ/コア', exercises: ['左右交互に行うサイドランジ (ボトム1〜3秒静止)', '左右交互に行うワンレッグ・ルーマニアン・デッドリフト', 'トヨタ (ボトム1〜3秒静止)', 'ロシアン・ツイスト']}
+                    ]
+                },
+                {
+                    week: 2, block: '筋持久力ブロック (ラダー)', protocol: 'ladder',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ/プル', exercises: ['プッシュアップ', 'レット・ミー・アップ', 'ミリタリープレス', 'レット・ミー・イン']},
+                        {day: 2, name: '2日目: レッグ/コア', exercises: ['左右交互に行うバックランジ (ボトム1〜3秒静止)', '左右交互に行うワンレッグ・ルーマニアン・デッドリフト', 'トヨタ (ボトム1〜3秒静止)', 'ハイパーエクステンション (腕を横に置く)']},
+                        {day: 3, name: '3日目: プッシュ/プル', exercises: ['プッシュアップ', 'レット・ミー・アップ', 'ミリタリー・プレス', 'レット・ミー・イン']},
+                        {day: 4, name: '4日目: レッグ/コア', exercises: ['左右交互に行うサイドランジ (ボトム1〜3秒静止)', '左右交互に行うワンレッグ・ルーマニアン・デッドリフト', 'トヨタ (ボトム1〜3秒静止)', 'ロシアン・ツイスト']}
+                    ]
+                },
+                {
+                    week: 3, block: '筋力ブロック (インターバルセット)', protocol: 'standard',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ', exercises: ['プッシュアップ (両足を高い位置)', 'ミリタリープレス', 'クローズグリップ・プッシュアップ', 'アシスティッド・ディップ (椅子利用)']},
+                        {day: 2, name: '2日目: レッグ', exercises: ['ブルガリアン・スプリット・スクワット (ボトム1〜3秒静止)', 'サイドランジ (ボトム4〜6秒静止)', 'トヨタ (ボトム4〜6秒静止)', 'ワンレッグ・ルーマニアン・デッドリフト (枕の上)']},
+                        {day: 3, name: '3日目: プル', exercises: ['ドア・プルアップ (ネガティブのみ)', 'レット・ミー・アップ', 'レット・ミー・イン', 'タオルカール']},
+                        {day: 4, name: '4日目: コア', exercises: ['レッグリフト (両手を胸の上)', 'スーパーマン', 'バイシクル', 'ハイパーエクステンション (両手を顎の下)']}
+                    ]
+                },
+                {
+                    week: 4, block: '筋力ブロック (インターバルセット)', protocol: 'standard',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ', exercises: ['プッシュアップ (両足を高い位置)', 'ミリタリープレス', 'クローズグリップ・プッシュアップ', 'アシスティッド・ディップ (椅子利用)']},
+                        {day: 2, name: '2日目: レッグ', exercises: ['ブルガリアン・スプリット・スクワット (ボトム1〜3秒静止)', 'サイドランジ (ボトム4〜6秒静止)', 'トヨタ (ボトム4〜6秒静止)', 'ワンレッグ・ルーマニアン・デッドリフト (枕の上)']},
+                        {day: 3, name: '3日目: プル', exercises: ['ドア・プルアップ (ネガティブのみ)', 'レット・ミー・アップ', 'レット・ミー・イン', 'タオルカール']},
+                        {day: 4, name: '4日目: コア', exercises: ['レッグリフト (両手を胸の上)', 'スーパーマン', 'バイシクル', 'ハイパーエクステンション (両手を顎の下)']}
+                    ]
+                },
+                {
+                    week: 5, block: 'パワーブロック (スーパーセット)', protocol: 'standard',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ', exercises: ['プッシュアップ (高足/ボトム1〜3秒静止) & ショーブ・オフ', 'ミリタリープレス (高足) & サンボアップ', 'クローズグリップ・プッシュアップ (高足) & アシスティッド・ディップ']},
+                        {day: 2, name: '2日目: レッグ', exercises: ['ワンレッグ・スクワット (椅子補助) & トヨタ (ボトム4〜6秒静止)', 'サイドランジ (ボトム4〜6秒静止) & バックランジ (ボトム1〜3秒静止)', 'ワンレッグ・ルーマニアン・デッドリフト (枕上/ボトム静止) & ボックス・ジャンプ']},
+                        {day: 3, name: '3日目: プル', exercises: ['ドア・プルアップ & レット・ミー・イン', 'レット・ミー・イン (トップ4〜6秒静止) & レット・ミー・アップ', 'レット・ミー・アップ (リバース/高足) & レット・ミー・イン (手のひら上)']},
+                        {day: 4, name: '4日目: コア', exercises: ['ハンギング・レッグリフト (膝曲げ) & アイアンクロス (膝曲げ)', 'ワンレッグ・ヒップ・エクステンション & スーパーマン', 'Vアップ & ロシアン・ツイスト']}
+                    ]
+                },
+                {
+                    week: 6, block: 'パワーブロック (スーパーセット)', protocol: 'standard',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ', exercises: ['プッシュアップ (高足/ボトム1〜3秒静止) & ショーブ・オフ', 'ミリタリープレス (高足) & サンボアップ', 'クローズグリップ・プッシュアップ (高足) & アシスティッド・ディップ']},
+                        {day: 2, name: '2日目: レッグ', exercises: ['ワンレッグ・スクワット (椅子補助) & トヨタ (ボトム4〜6秒静止)', 'サイドランジ (ボトム4〜6秒静止) & バックランジ (ボトム1〜3秒静止)', 'ワンレッグ・ルーマニアン・デッドリフト (枕上/ボトム静止) & ボックス・ジャンプ']},
+                        {day: 3, name: '3日目: プル', exercises: ['ドア・プルアップ & レット・ミー・イン', 'レット・ミー・イン (トップ4〜6秒静止) & レット・ミー・アップ', 'レット・ミー・アップ (リバース/高足) & レット・ミー・イン (手のひら上)']},
+                        {day: 4, name: '4日目: コア', exercises: ['ハンギング・レッグリフト (膝曲げ) & アイアンクロス (膝曲げ)', 'ワンレッグ・ヒップ・エクステンション & スーパーマン', 'Vアップ & ロシアン・ツイスト']}
+                    ]
+                },
+                {
+                    week: 7, block: '起伏ブロック (7週目)', protocol: 'mixed',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ (ラダー)', exercises: ['チャイニーズ・プッシュアップ', 'プッシュアップ', 'クローズグリップ・プッシュアップ', 'シーティド・ディップ']},
+                        {day: 2, name: '2日目: レッグ (スーパーセット)', exercises: ['左右交互ワンレッグ・スクワット (手すり) & トヨタ (4〜6秒静止)', '左右交互サイドランジ & バックランジ (静止)', 'ワンレッグ・ルーマニアン・デッドリフト & ボックス・ジャンプ']},
+                        {day: 3, name: '3日目: プル (インターバルセット)', exercises: ['ドア・プルアップ (ネガティブ)', 'レット・ミー・アップ', 'レット・ミー・イン', 'タオルカール']},
+                        {day: 4, name: '4日目: コア (タバタ)', exercises: ['ロシアン・ツイスト', 'フラッター・キック', 'スクワット']},
+                        {day: 5, name: '5日目: 全身 (スタッパーズ)', exercises: ['レット・ミー・アップ (膝曲げ6レップ)', '左右交互サイドランジ (12レップ)', 'プッシュアップ (8レップ)']}
+                    ]
+                },
+                {
+                    week: 8, block: '起伏ブロック (8週目)', protocol: 'mixed',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ (タバタ)', exercises: ['プッシュアップ (高手)', 'シーティド・ディップ (足地)', 'スクワット']},
+                        {day: 2, name: '2日目: レッグ (ラダー)', exercises: ['左右交互バックランジ (静止)', '左右交互サイドランジ (トヨタ/静止)', '左右交互ワンレッグ・ルーマニアン・デッドリフト']},
+                        {day: 3, name: '3日目: プル (スーパーセット)', exercises: ['ドア・プルアップ & レット・ミー・イン', 'レット・ミー・イン (静止) & レット・ミー・アップ', 'レット・ミー・アップ (リバース/高足) & レット・ミー・イン (手のひら上)']},
+                        {day: 4, name: '4日目: コア (インターバルセット)', exercises: ['レッグリフト (胸手)', 'スーパーマン', 'ハイパーエクステンション']},
+                        {day: 5, name: '5日目: 全身 (スタッパーズ)', exercises: ['レット・ミー・アップ (膝曲げ6レップ)', '左右交互サイドランジ (12レップ)', 'プッシュアップ (8レップ)']}
+                    ]
+                },
+                {
+                    week: 9, block: '起伏ブロック (9週目)', protocol: 'mixed',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ (インターバルセット)', exercises: ['プッシュアップ (高足)', 'チャイニーズ・プッシュアップ (高手)', 'クローズグリップ・プッシュアップ (高手)', 'アシスティッド・ディップ']},
+                        {day: 2, name: '2日目: レッグ (タバタ)', exercises: ['アイアンマイク', 'サイドジャンプ', 'スクワット']},
+                        {day: 3, name: '3日目: プル (ラダー)', exercises: ['レット・ミー・アップ', 'レット・ミー・イン', 'レット・ミー・アップ (リバース)', 'レット・ミー・イン (手のひら上)']},
+                        {day: 4, name: '4日目: コア (スーパーセット)', exercises: ['ハンギング・レッグリフト (膝曲げ) & アイアンクロス', '左右交互ワンレッグ・ヒップ・エクステンション & スーパーマン', 'Vアップ & ロシアン・ツイスト']},
+                        {day: 5, name: '5日目: 全身 (スタッパーズ)', exercises: ['レット・ミー・アップ (膝曲げ6レップ)', '左右交互サイドランジ (12レップ)', 'プッシュアップ (8レップ)']}
+                    ]
+                },
+                {
+                    week: 10, block: '起伏ブロック (10週目 / 最終ピーク)', protocol: 'mixed',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ (スーパーセット)', exercises: ['プッシュアップ (高足/静止) & ショーブ・オフ', 'ミリタリープレス (高足) & オーバーヘッド・プレス', 'クローズグリップ・プッシュアップ (高足) & アシスティッド・ディップ']},
+                        {day: 2, name: '2日目: レッグ (インターバルセット)', exercises: ['ブルガリアン・スプリット・スクワット (静止)', 'サイドランジ (静止)', 'トヨタ (静止)', 'ワンレッグ・ルーマニアン・デッドリフト']},
+                        {day: 3, name: '3日目: プル (タバタ)', exercises: ['レット・ミー・アップ', 'レット・ミー・イン', 'スクワット']},
+                        {day: 4, name: '4日目: コア (ラダー)', exercises: ['バイシクル', 'ハイパーエクステンション (胸下手)', 'ハローダーリン', 'スイマー']},
+                        {day: 5, name: '5日目: 全身 (スタッパーズ)', exercises: ['レット・ミー・アップ (膝曲げ6レップ)', '左右交互サイドランジ (12レップ)', 'プッシュアップ (8レップ)']}
+                    ]
+                }
+            ],
+            basic: [
+                {
+                    week: 1, block: '筋持久力ブロック (ラダー)', protocol: 'ladder',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ/プル', exercises: ['プッシュアップ (両手を高い位置)', 'レット・ミー・イン', 'シーティド・ディップ (地に足をつける)', 'レット・ミー・アップ (膝を曲げて)']},
+                        {day: 2, name: '2日目: レッグ/コア', exercises: ['左右交互に行うバックランジ', '左右交互に行うワンレッグ・ルーマニアン・デッドリフト', 'スクワット', 'スイマー']},
+                        {day: 3, name: '3日目: プッシュ/プル', exercises: ['プッシュアップ (両手を高い位置)', 'レット・ミー・イン', 'シーティド・ディップ (地に足をつける)', 'レット・ミー・アップ (膝を曲げて)']},
+                        {day: 4, name: '4日目: レッグ/コア', exercises: ['サイドランジ', '左右交互に行うワンレッグ・ルーマニアン・デッドリフト', 'スクワット (ボトム1〜3秒静止)', 'サイドクランチ']}
+                    ]
+                },
+                {
+                    week: 2, block: '筋持久力ブロック (ラダー)', protocol: 'ladder',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ/プル', exercises: ['プッシュアップ (両手を高い位置)', 'レット・ミー・イン', 'シーティド・ディップ (地に足をつける)', 'レット・ミー・アップ (膝を曲げて)']},
+                        {day: 2, name: '2日目: レッグ/コア', exercises: ['左右交互に行うバックランジ', '左右交互に行うワンレッグ・ルーマニアン・デッドリフト', 'スクワット', 'スイマー']},
+                        {day: 3, name: '3日目: プッシュ/プル', exercises: ['プッシュアップ (両手を高い位置)', 'レット・ミー・イン', 'シーティド・ディップ (地に足をつける)', 'レット・ミー・アップ (膝を曲げて)']},
+                        {day: 4, name: '4日目: レッグ/コア', exercises: ['サイドランジ', '左右交互に行うワンレッグ・ルーマニアン・デッドリフト', 'スクワット (ボトム1〜3秒静止)', 'サイドクランチ']}
+                    ]
+                },
+                {
+                    week: 3, block: '筋力ブロック (インターバルセット)', protocol: 'standard',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ', exercises: ['プッシュアップ', 'ミリタリープレス (両手を高い位置)', 'クローズグリップ・プッシュアップ (両手を高い位置)', 'シーティド・ディップ']},
+                        {day: 2, name: '2日目: レッグ', exercises: ['ブルガリアン・スプリット・スクワット', 'サイドランジ', 'スクワット (ボトム1〜3秒静止)', 'ワンレッグ・ルーマニアン・デッドリフト (枕の上)']},
+                        {day: 3, name: '3日目: プル', exercises: ['レット・ミー・イン', 'レット・ミー・アップ (膝を曲げて)', 'レット・ミー・イン (手のひらを上に向けて)', 'タオルカール']},
+                        {day: 4, name: '4日目: コア', exercises: ['レッグリフト', 'ハイパーエクステンション (両手を顎の下)', 'ロシアン・ツイスト', 'スイマー']}
+                    ]
+                },
+                {
+                    week: 4, block: '筋力ブロック (インターバルセット)', protocol: 'standard',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ', exercises: ['プッシュアップ', 'ミリタリープレス (両手を高い位置)', 'クローズグリップ・プッシュアップ (両手を高い位置)', 'シーティド・ディップ']},
+                        {day: 2, name: '2日目: レッグ', exercises: ['ブルガリアン・スプリット・スクワット', 'サイドランジ', 'スクワット (ボトム1〜3秒静止)', 'ワンレッグ・ルーマニアン・デッドリフト (枕の上)']},
+                        {day: 3, name: '3日目: プル', exercises: ['レット・ミー・イン', 'レット・ミー・アップ (膝を曲げて)', 'レット・ミー・イン (手のひらを上に向けて)', 'タオルカール']},
+                        {day: 4, name: '4日目: コア', exercises: ['レッグリフト', 'ハイパーエクステンション (両手を顎の下)', 'ロシアン・ツイスト', 'スイマー']}
+                    ]
+                },
+                {
+                    week: 5, block: 'パワーブロック (スーパーセット)', protocol: 'standard',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ', exercises: ['プッシュアップ (高足) & ショーブ・オフ', 'ミリタリープレス & サンボアップ', 'クローズグリップ・プッシュアップ & シーティド・ディップ']},
+                        {day: 2, name: '2日目: レッグ', exercises: ['バックランジ (ボトム4〜6秒静止) & トヨタ', 'フロントランジ (ボトム4〜6秒静止) & サイドランジ', 'ワンレッグ・ルーマニアン・デッドリフト (枕上) & スクワット (静止)']},
+                        {day: 3, name: '3日目: プル', exercises: ['ドア・プルアップ (ネガティブ) & レット・ミー・イン', 'レット・ミー・イン (トップ4〜6秒収縮) & タオルカール', 'レット・ミー・アップ (両足伸ばし) & レット・ミー・イン (手のひら上)']},
+                        {day: 4, name: '4日目: コア', exercises: ['Vアップ & ロシアン・ツイスト', 'スーパーマン & スイマー', 'ハンギング・レッグリフト (膝曲げ) & レッグリフト']}
+                    ]
+                },
+                {
+                    week: 6, block: 'パワーブロック (スーパーセット)', protocol: 'standard',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ', exercises: ['プッシュアップ (高足) & ショーブ・オフ', 'ミリタリープレス & サンボアップ', 'クローズグリップ・プッシュアップ & シーティド・ディップ']},
+                        {day: 2, name: '2日目: レッグ', exercises: ['バックランジ (ボトム4〜6秒静止) & トヨタ', 'フロントランジ (ボトム4〜6秒静止) & サイドランジ', 'ワンレッグ・ルーマニアン・デッドリフト (枕上) & スクワット (静止)']},
+                        {day: 3, name: '3日目: プル', exercises: ['ドア・プルアップ (ネガティブ) & レット・ミー・イン', 'レット・ミー・イン (トップ4〜6秒収縮) & タオルカール', 'レット・ミー・アップ (両足伸ばし) & レット・ミー・イン (手のひら上)']},
+                        {day: 4, name: '4日目: コア', exercises: ['Vアップ & ロシアン・ツイスト', 'スーパーマン & スイマー', 'ハンギング・レッグリフト (膝曲げ) & レッグリフト']}
+                    ]
+                },
+                {
+                    week: 7, block: '起伏ブロック (7週目)', protocol: 'mixed',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ (ラダー)', exercises: ['ミリタリープレス (高手)', 'プッシュアップ (高手)', 'クローズグリップ・プッシュアップ (高手)', 'シーティド・ディップ (膝曲げ)']},
+                        {day: 2, name: '2日目: レッグ (スーパーセット)', exercises: ['バックランジ (ボトム4〜6秒静止) & トヨタ', 'フロントランジ (ボトム4〜6秒静止) & サイドランジ', 'ワンレッグ・ルーマニアン・デッドリフト (ミドル静止) & ポゴジャンプ']},
+                        {day: 3, name: '3日目: プル (インターバルセット)', exercises: ['レット・ミー・イン', 'レット・ミー・アップ (膝曲げ)', 'レット・ミー・イン (手のひら上)', 'タオルカール']},
+                        {day: 4, name: '4日目: コア (タバタ)', exercises: ['ロシアン・ツイスト', 'ビーチ・シーソー', 'スタンディング・ニーレイズ']},
+                        {day: 5, name: '5日目: 全身 (スタッパーズ)', exercises: ['左右交互バックランジ (10レップ)', 'レット・ミー・イン (8レップ)', 'プッシュアップ (6レップ)']}
+                    ]
+                },
+                {
+                    week: 8, block: '起伏ブロック (8週目)', protocol: 'mixed',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ (タバタ)', exercises: ['プッシュアップ (胸まで手を上げる)', 'ロッキングチェア', 'バーピー (ウエストまで手を上げる)']},
+                        {day: 2, name: '2日目: レッグ (ラダー)', exercises: ['左右交互バックランジ', '左右交互ワンレッグ・ルーマニアン・デッドリフト', 'スクワット (ボトム1〜3秒静止)', 'グッドモーニング (ボトム1〜3秒静止)']},
+                        {day: 3, name: '3日目: プル (スーパーセット)', exercises: ['ドア・プルアップ (ネガティブ) & レット・ミー・イン', 'レット・ミー・イン (トップ収縮) & レット・ミー・アップ (膝曲げ)', 'レット・ミー・アップ (足伸ばし) & レット・ミー・イン (手のひら上)']},
+                        {day: 4, name: '4日目: コア (インターバルセット)', exercises: ['レッグリフト', 'ハイパーエクステンション (両手を顎の下)', 'ロシアン・ツイスト', 'スイマー']},
+                        {day: 5, name: '5日目: 全身 (スタッパーズ)', exercises: ['左右交互バックランジ (10レップ)', 'レット・ミー・イン (8レップ)', 'プッシュアップ (6レップ)']}
+                    ]
+                },
+                {
+                    week: 9, block: '起伏ブロック (9週目)', protocol: 'mixed',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ (インターバルセット)', exercises: ['プッシュアップ', 'ミリタリープレス (高手)', 'クローズグリップ・プッシュアップ (高手)', 'シーティド・ディップ (膝曲げ)']},
+                        {day: 2, name: '2日目: レッグ (タバタ)', exercises: ['ビート・ユア・ブーツ', 'ランジ', 'グッドモーニング']},
+                        {day: 3, name: '3日目: プル (ラダー)', exercises: ['レット・ミー・アップ (膝曲げ)', 'レット・ミー・イン', 'レット・ミー・アップ (リバース/膝曲げ)', 'レット・ミー・イン (手のひら上)']},
+                        {day: 4, name: '4日目: コア (スーパーセット)', exercises: ['Vアップ & ロシアン・ツイスト', 'スーパーマン & スイマー', 'バイシクル & レッグリフト']},
+                        {day: 5, name: '5日目: 全身 (スタッパーズ)', exercises: ['左右交互バックランジ (10レップ)', 'レット・ミー・イン (8レップ)', 'プッシュアップ (6レップ)']}
+                    ]
+                },
+                {
+                    week: 10, block: '起伏ブロック (10週目 / 最終ピーク)', protocol: 'mixed',
+                    days: [
+                        {day: 1, name: '1日目: プッシュ (スーパーセット)', exercises: ['プッシュアップ (高足) & ショーブ・オフ', 'ミリタリープレス & サンボアップ', 'クローズグリップ・プッシュアップ & シーティド・ディップ (地足)']},
+                        {day: 2, name: '2日目: レッグ (インターバルセット)', exercises: ['ブルガリアン・スプリット・スクワット', 'サイドランジ', 'スクワット (4〜6秒静止) & サイドランジ', 'ワンレッグ・ルーマニアン・デッドリフト (枕上)']},
+                        {day: 3, name: '3日目: プル (タバタ)', exercises: ['レット・ミー・イン (ステップバック)', 'バムバムズ', 'タオルカール']},
+                        {day: 4, name: '4日目: コア (ラダー)', exercises: ['クランチ・イット・アップ', 'ハイパーエクステンション (腕横)', 'レッグリフト', 'ハイパーエクステンション (下半身のみ)']},
+                        {day: 5, name: '5日目: 全身 (スタッパーズ)', exercises: ['左右交互バックランジ (10レップ)', 'レット・ミー・イン (8レップ)', 'プッシュアップ (6レップ)']}
+                    ]
+                }
+            ]
+        };
+
+        const LEVEL_NAMES = {
+            basic: 'ベーシック (初級)',
+            first_class: '1stクラス (中級)',
+            master_class: 'マスタークラス (上級)',
+            chief_class: 'チーフクラス (エリート)'
+        };
+
+        let projects = [];
+        let currentProjectId = null;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('workoutDateInput').value = today;
+            document.getElementById('newProjectStartDateInput').value = today;
+
+            loadCachedExercises();
+            initSupabaseConnection();
+            renderExerciseOptions();
+            renderExerciseLibrary();
+            updateLadderDisplay();
+            updateTimerUI();
+
+            const supabaseConfigBtn = document.getElementById('supabaseConfigBtn');
+            if (supabaseConfigBtn) {
+                supabaseConfigBtn.addEventListener('click', openSupabaseModal);
+            }
+        });
+
+        /* ==========================================================
+           Supabase Auth & Session Handling (with Users table)
+        ========================================================== */
+        function openAuthModal() {
+            document.getElementById('authErrorBanner').classList.add('hidden');
+            document.getElementById('authModal').classList.remove('hidden');
+            document.getElementById('authModal').classList.add('flex');
+
+            const nameInput = document.getElementById('authNameInput');
+            if (currentUserName && nameInput) {
+                nameInput.value = currentUserName;
+            }
+            document.getElementById('authEmailInput').focus();
+        }
+
+        function closeAuthModal() {
+            document.getElementById('authModal').classList.add('hidden');
+            document.getElementById('authModal').classList.remove('flex');
+        }
+
+        async function handleAuthSubmit(e) {
+            e.preventDefault();
+            if (!supabaseClient) {
+                showAuthError('Supabaseクライアントが初期化されていません。接続設定を確認してください。');
+                return;
+            }
+
+            const inputName = document.getElementById('authNameInput').value.trim();
+            const email = document.getElementById('authEmailInput').value.trim();
+            const password = document.getElementById('authPasswordInput').value;
+            const submitBtn = document.getElementById('authSubmitBtn');
+
+            try {
+                submitBtn.disabled = true;
+                submitBtn.classList.add('opacity-70');
+                document.getElementById('authErrorBanner').classList.add('hidden');
+
+                const {data, error} = await supabaseClient.auth.signInWithPassword({email, password});
+                if (error) throw error;
+
+                // Save or update name into public.users table if inputName is provided
+                if (data?.user) {
+                    if (inputName) {
+                        await syncUserProfileName(data.user.id, inputName);
+                    } else {
+                        await fetchUserProfileName(data.user.id);
+                    }
+                    // Sync any offline/local projects or workouts to Supabase
+                    await syncLocalDataToCloud(data.user.id);
+                }
+
+                showToast(`${currentUserName ? currentUserName + 'さん、' : ''}ログインしました！`);
+                closeAuthModal();
+            } catch (err) {
+                console.error('Auth error:', err);
+                showAuthError(err.message || '認証に失敗しました');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('opacity-70');
+            }
+        }
+
+        async function syncUserProfileName(userId, name) {
+            if (!supabaseClient || !userId) return;
+            try {
+                const {error} = await supabaseClient
+                    .from('users')
+                    .upsert({id: userId, name: name, updated_at: new Date().toISOString()});
+                if (!error) {
+                    currentUserName = name;
+                    localStorage.setItem('wt_user_name', name);
+                    updateAuthUI(currentUser);
+                }
+            } catch (e) {
+                console.warn('Could not upsert profile into public.users:', e);
+            }
+        }
+
+        async function fetchUserProfileName(userId) {
+            if (!supabaseClient || !userId) return;
+            try {
+                const {data, error} = await supabaseClient
+                    .from('users')
+                    .select('name')
+                    .eq('id', userId)
+                    .maybeSingle();
+
+                if (!error && data?.name) {
+                    currentUserName = data.name;
+                    localStorage.setItem('wt_user_name', currentUserName);
+                    updateAuthUI(currentUser);
+                } else {
+                    currentUserName = localStorage.getItem('wt_user_name') || null;
+                }
+            } catch (e) {
+                console.warn('Could not fetch profile from public.users:', e);
+            }
+        }
+
+        function showAuthError(msg) {
+            const banner = document.getElementById('authErrorBanner');
+            const text = document.getElementById('authErrorMessage');
+            text.textContent = msg;
+            banner.classList.remove('hidden');
+        }
+
+        async function handleSignOut() {
+            if (!supabaseClient) return;
+            try {
+                await supabaseClient.auth.signOut();
+                currentUser = null;
+                currentUserName = null;
+                localStorage.removeItem('wt_user_name');
+                updateAuthUI(null);
+                showToast('ログアウトしました');
+                loadLocalLogs();
+            } catch (err) {
+                console.error('Sign out failed:', err);
+                showToast('ログアウト時にエラーが発生しました');
+            }
+        }
+
+        function updateAuthUI(user) {
+            const authBtn = document.getElementById('authBtn');
+            const profileBadge = document.getElementById('userProfileBadge');
+            const emailText = document.getElementById('userEmailText');
+            const syncBadge = document.getElementById('syncStatusBadge');
+
+            if (!authBtn || !profileBadge) return;
+
+            if (user) {
+                currentUser = user;
+                authBtn.classList.add('hidden');
+                profileBadge.classList.remove('hidden');
+                profileBadge.classList.add('flex');
+
+                const displayName = currentUserName || user.email || 'ログイン中';
+                if (emailText) emailText.textContent = displayName;
+
+                if (syncBadge) {
+                    syncBadge.textContent = 'Auth同期中';
+                    syncBadge.className = 'text-emerald-400 font-medium hidden sm:inline';
+                }
+            } else {
+                currentUser = null;
+                currentUserName = null;
+                authBtn.classList.remove('hidden');
+                profileBadge.classList.add('hidden');
+                profileBadge.classList.remove('flex');
+                if (syncBadge) {
+                    syncBadge.textContent = '未ログイン';
+                    syncBadge.className = 'text-slate-400 hidden sm:inline';
+                }
+            }
+        }
+
+        /* ==========================================================
+           Project (10-Week Program) Management
+        ========================================================== */
+        function loadProjects() {
+            try {
+                const stored = localStorage.getItem('wt_projects');
+                projects = stored ? JSON.parse(stored) : [];
+            } catch (e) {
+                projects = [];
+            }
+
+            if (projects.length === 0) {
+                currentProjectId = null;
+                document.getElementById('cancelProjectModalBtn').classList.add('hidden');
+                // 未ログイン時はプロジェクト作成ではなくログインを促す
+                if (!currentUser) {
+                    openAuthModal();
+                } else {
+                    openNewProjectModal();
+                }
+                return;
+            }
+
+            document.getElementById('cancelProjectModalBtn').classList.remove('hidden');
+            currentProjectId = localStorage.getItem('wt_current_project_id') || projects[0].id;
+            renderProjectSelectors();
+            renderCurriculumView();
+            renderCalendar();
+        }
+
+        function saveProjectsToStorage() {
+            try {
+                localStorage.setItem('wt_projects', JSON.stringify(projects));
+            } catch (e) { }
+        }
+
+        function getCurrentProject() {
+            return projects.find(p => p.id === currentProjectId) || projects[0];
+        }
+
+        function renderProjectSelectors() {
+            const select = document.getElementById('projectSelector');
+            select.innerHTML = '';
+
+            projects.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                const levelLabel = LEVEL_NAMES[p.level || 'master_class'] || 'マスタークラス';
+                opt.textContent = `${p.title} [${levelLabel}] (${p.start_date}〜)`;
+                if (p.id === currentProjectId) opt.selected = true;
+                select.appendChild(opt);
+            });
+
+            updateActiveProjectUI();
+        }
+
+        function onProjectSelectChange() {
+            currentProjectId = document.getElementById('projectSelector').value;
+            localStorage.setItem('wt_current_project_id', currentProjectId);
+            updateActiveProjectUI();
+            renderCurriculumView();
+            renderHistoryList();
+            renderCalendar();
+        }
+
+        function updateActiveProjectUI() {
+            const curr = getCurrentProject();
+            if (!curr) return;
+
+            const level = curr.level || 'master_class';
+            const levelBadge = document.getElementById('headerProjectLevelBadge');
+            levelBadge.textContent = LEVEL_NAMES[level] || 'マスタークラス';
+
+            document.getElementById('headerProjectName').textContent = curr.title;
+            document.getElementById('projectStartDateDisplay').textContent = curr.start_date;
+
+            const start = new Date(curr.start_date + 'T00:00:00');
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const diffTime = today - start;
+            const diffDays = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+            const currentWeekCalc = Math.min(Math.floor(diffDays / 7) + 1, 10);
+            const isRestPeriod = diffDays >= 70 && diffDays < 91;
+            const isOverTenWeeks = diffDays >= 70;
+
+            const completionBanner = document.getElementById('projectCompletionBanner');
+            if (isOverTenWeeks) {
+                completionBanner.classList.remove('hidden');
+            } else {
+                completionBanner.classList.add('hidden');
+            }
+
+            if (isRestPeriod) {
+                const restWeek = Math.floor((diffDays - 70) / 7) + 1;
+                document.getElementById('headerProjectWeekBadge').textContent = `休養期 ${restWeek}週目 (休息)`;
+                document.getElementById('headerProjectWeekBadge').className = 'px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 font-mono font-semibold border border-purple-500/30';
+            } else if (diffDays >= 91) {
+                document.getElementById('headerProjectWeekBadge').textContent = `10週+休養完了`;
+                document.getElementById('headerProjectWeekBadge').className = 'px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300 font-mono font-semibold border border-blue-500/30';
+            } else {
+                document.getElementById('headerProjectWeekBadge').textContent = `今週: Week ${currentWeekCalc}`;
+                document.getElementById('headerProjectWeekBadge').className = 'px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-mono font-semibold border border-emerald-500/30';
+            }
+
+            document.getElementById('calendarStartDateText').textContent = curr.start_date;
+            if (isRestPeriod) {
+                document.getElementById('calendarCurrentWeekBadge').textContent = `休養期間中 (アクティブリカバリー)`;
+            } else {
+                document.getElementById('calendarCurrentWeekBadge').textContent = `第${currentWeekCalc}週目 (Week ${currentWeekCalc})`;
+            }
+            document.getElementById('calendarElapsedDaysText').textContent = `Day ${Math.min(diffDays + 1, 70)} / 70日`;
+
+            const daysUntilRest = Math.max(0, 70 - diffDays);
+            document.getElementById('calendarDaysUntilRestText').textContent = daysUntilRest > 0 ? `あと ${daysUntilRest}日` : '休養期間中';
+
+            const timelinePercent = Math.min(Math.round(((diffDays) / 70) * 100), 100);
+            document.getElementById('calendarPercentText').textContent = `${timelinePercent}% 経過`;
+            document.getElementById('calendarProgressBar').style.width = `${timelinePercent}%`;
+
+            const projLogs = workoutLogs.filter(l => (l.project_id || 'default-project') === curr.id);
+            const completedCount = projLogs.length;
+            const pct = Math.min(Math.round((completedCount / 40) * 100), 100);
+
+            document.getElementById('projectProgressPercent').textContent = `${pct}% (${completedCount}回 記録)`;
+            document.getElementById('projectProgressBar').style.width = `${pct}%`;
+
+            const badge = document.getElementById('projectStatusBadge');
+            if (isOverTenWeeks) {
+                badge.textContent = '10週完了！休養期間中 (2〜3週)';
+                badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30';
+            } else {
+                badge.textContent = '進行中 (10週プログラム)';
+                badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+            }
+        }
+
+        function onSessionWeekChange() {
+            const wk = parseInt(document.getElementById('sessionWeekSelect').value, 10);
+            const daySelect = document.getElementById('sessionDaySelect');
+            if (wk >= 7) {
+                if (!daySelect.querySelector('option[value="5"]')) {
+                    const opt = document.createElement('option');
+                    opt.value = "5";
+                    opt.textContent = "5日目 (スタッパーズ)";
+                    daySelect.appendChild(opt);
+                }
+            }
+        }
+
+        function openNewProjectModal() {
+            document.getElementById('newProjectModal').classList.remove('hidden');
+            document.getElementById('newProjectModal').classList.add('flex');
+        }
+
+        function closeNewProjectModal() {
+            document.getElementById('newProjectModal').classList.add('hidden');
+            document.getElementById('newProjectModal').classList.remove('flex');
+        }
+
+        async function createProject() {
+            const title = document.getElementById('newProjectTitleInput').value.trim() || `第${projects.length + 1}期 10週間プログラム`;
+            const level = document.getElementById('newProjectLevelSelect').value || 'master_class';
+            const startDate = document.getElementById('newProjectStartDateInput').value || new Date().toISOString().split('T')[0];
+
+            const newProj = {
+                id: 'proj-' + Date.now(),
+                title,
+                level,
+                start_date: startDate,
+                status: 'active',
+                created_at: new Date().toISOString()
+            };
+
+            projects.unshift(newProj);
+            currentProjectId = newProj.id;
+            saveProjectsToStorage();
+            localStorage.setItem('wt_current_project_id', currentProjectId);
+
+            if (supabaseClient && currentUser) {
+                try {
+                    await supabaseClient.from('projects').insert([{
+                        title: newProj.title,
+                        start_date: newProj.start_date,
+                        status: newProj.status,
+                        level: newProj.level,
+                        user_id: currentUser.id,
+                        notes: `level:${newProj.level}`
+                    }]);
+                } catch (e) {
+                    console.warn('Supabase project sync failed:', e);
+                }
+            }
+
+            document.getElementById('cancelProjectModalBtn').classList.remove('hidden');
+            closeNewProjectModal();
+            renderProjectSelectors();
+            renderCurriculumView();
+            renderCalendar();
+            showToast(`「${title} (${LEVEL_NAMES[level]})」を開始しました！`);
+        }
+
+        /* ==========================================================
+           10-Week Curriculum View & Session Loader
+        ========================================================== */
+        function renderCurriculumView() {
+            const container = document.getElementById('weeksCurriculumContainer');
+            container.innerHTML = '';
+
+            const currProj = getCurrentProject();
+            const level = currProj ? (currProj.level || 'master_class') : 'master_class';
+            const curriculum = LEVEL_CURRICULUMS[level] || LEVEL_CURRICULUMS.master_class;
+
+            const projLogs = workoutLogs.filter(l => (l.project_id || 'default-project') === (currProj ? currProj.id : ''));
+
+            curriculum.forEach(wk => {
+                const weekCard = document.createElement('div');
+                weekCard.className = 'bg-slate-950 border border-slate-800/90 rounded-2xl p-4 transition space-y-3';
+
+                const dayButtons = wk.days.map(d => {
+                    const isDone = projLogs.some(l => Number(l.week_number) === wk.week && Number(l.day_number) === d.day);
+                    const doneBadge = isDone
+                        ? '<span class="text-emerald-400 font-bold text-xs"><i class="fa-solid fa-circle-check mr-1"></i>済</span>'
+                        : '<span class="text-slate-500 text-xs">未</span>';
+
+                    const exerciseSummary = d.exercises.join(' / ');
+                    const firstExercise = d.exercises[0] || 'プッシュアップ';
+                    const proto = wk.protocol === 'ladder' ? 'ladder' : 'standard';
+
+                    return `
+            <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition flex flex-col justify-between gap-2">
+              <div>
+                <div class="text-xs font-bold text-white flex items-center justify-between">
+                  <span>${d.name}</span>
+                  ${doneBadge}
+                </div>
+                <div class="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-tight" title="${exerciseSummary}">
+                  ${exerciseSummary}
+                </div>
+              </div>
+              <div class="flex justify-end pt-1">
+                <button onclick="loadCurriculumSession(${wk.week}, ${d.day}, '${firstExercise.replace(/'/g, "\\'")}', '${proto}')" class="px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition active:scale-95">
+                  セッション開始
+                </button>
+              </div>
+            </div>
+          `;
+                }).join('');
+
+                weekCard.innerHTML = `
+          <div class="flex items-center justify-between border-b border-slate-800/60 pb-2">
+            <div class="flex items-center gap-2">
+              <span class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 font-mono font-bold flex items-center justify-center text-xs">W${wk.week}</span>
+              <div>
+                <h4 class="text-xs font-bold text-white">第${wk.week}週: ${wk.block}</h4>
+                <p class="text-[10px] text-slate-400 font-mono">プロトコル: ${wk.protocol === 'ladder' ? 'ストレートラダー (7:30)' : (wk.protocol === 'mixed' ? '起伏ブロック (日替わり)' : 'インターバル/スーパーセット')}</p>
+              </div>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+            ${dayButtons}
+          </div>
+        `;
+                container.appendChild(weekCard);
+            });
+        }
+
+        function loadCurriculumSession(week, day, exerciseName, protocol) {
+            document.getElementById('sessionWeekSelect').value = week;
+            onSessionWeekChange();
+            document.getElementById('sessionDaySelect').value = day;
+
+            const allEx = getAllExercises();
+            if (!allEx.some(e => e.name === exerciseName)) {
+                customExercises.push({
+                    id: 'auto-' + Date.now(),
+                    name: exerciseName,
+                    category: day === 1 ? 'プッシュ' : (day === 2 ? 'レッグ' : (day === 3 ? 'プル' : 'コア'))
+                });
+                saveProjectsToStorage();
+                renderExerciseOptions();
+            }
+
+            document.getElementById('exerciseSelect').value = exerciseName;
+            setProtocol(protocol);
+            onExerciseChange();
+            switchTab('record');
+
+            document.getElementById('headerProjectWeekBadge').textContent = `Week ${week} / Day ${day}`;
+            showToast(`Week ${week} Day ${day} をセットしました！`);
+        }
+
+        function switchTab(tabKey) {
+            const tabs = ['record', 'calendar', 'project', 'history', 'exercises'];
+            tabs.forEach(t => {
+                const sec = document.getElementById('section' + t.charAt(0).toUpperCase() + t.slice(1));
+                const btn = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1) + 'Btn');
+                if (!sec || !btn) return;
+                if (t === tabKey) {
+                    sec.classList.remove('hidden');
+                    btn.className = 'flex flex-col sm:flex-row items-center justify-center gap-1 py-2 sm:py-2.5 rounded-xl font-medium transition bg-emerald-600 text-white shadow';
+                } else {
+                    sec.classList.add('hidden');
+                    btn.className = 'flex flex-col sm:flex-row items-center justify-center gap-1 py-2 sm:py-2.5 rounded-xl font-medium transition text-slate-400 hover:text-white';
+                }
+            });
+
+            if (tabKey === 'calendar') {
+                renderCalendar();
+            } else if (tabKey === 'history') {
+                renderHistoryList();
+            } else if (tabKey === 'project') {
+                renderCurriculumView();
+            }
+        }
+
+        function changeCalendarMonth(delta) {
+            calendarCurrentMonth += delta;
+            if (calendarCurrentMonth < 0) {
+                calendarCurrentMonth = 11;
+                calendarCurrentYear--;
+            } else if (calendarCurrentMonth > 11) {
+                calendarCurrentMonth = 0;
+                calendarCurrentYear++;
+            }
+            renderCalendar();
+        }
+
+        function goToCurrentMonth() {
+            const now = new Date();
+            calendarCurrentYear = now.getFullYear();
+            calendarCurrentMonth = now.getMonth();
+            renderCalendar();
+        }
+
+        function selectCalendarDate(dateStr) {
+            selectedCalendarDate = dateStr;
+            const card = document.getElementById('calendarDayDetailsCard');
+            if (!card) return;
+            card.classList.remove('hidden');
+
+            document.getElementById('selectedDayDateDisplay').textContent = dateStr;
+
+            const curr = getCurrentProject();
+            let weekLabel = 'プログラム外';
+            if (curr && curr.start_date) {
+                const start = new Date(curr.start_date + 'T00:00:00');
+                const target = new Date(dateStr + 'T00:00:00');
+                const diffDays = Math.floor((target - start) / (1000 * 60 * 60 * 24));
+                if (diffDays >= 0 && diffDays < 70) {
+                    const wk = Math.floor(diffDays / 7) + 1;
+                    const day = (diffDays % 7) + 1;
+                    weekLabel = `Week ${wk} (Day ${day})`;
+                } else if (diffDays >= 70 && diffDays < 91) {
+                    weekLabel = '休養期間 (アクティブリカバリー)';
+                }
+            }
+            document.getElementById('selectedDayWeekBadge').textContent = weekLabel;
+
+            const dayLogs = workoutLogs.filter(l => l.workout_date === dateStr);
+            const logsContainer = document.getElementById('selectedDayLogsContainer');
+            if (dayLogs.length === 0) {
+                logsContainer.innerHTML = '<p class="text-slate-500 py-2">この日の筋トレ記録はありません。</p>';
+            } else {
+                logsContainer.innerHTML = dayLogs.map(l => `
+          <div class="bg-slate-900 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white">${l.exercise_name}</div>
+              <div class="text-[11px] text-emerald-400 font-mono">
+                ${l.ladder_rung ? `${l.ladder_rung}段 / ` : ''}${l.total_reps}回
+                ${l.completed_within_time ? '<span class="text-emerald-300 ml-1">(7:30完走)</span>' : ''}
+              </div>
+            </div>
+            <button onclick="deleteRecord('${l.id}')" class="text-slate-500 hover:text-rose-400 p-1 text-xs" title="削除">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </div>
+        `).join('');
+            }
+        }
+
+        function startSessionForDate() {
+            if (selectedCalendarDate) {
+                document.getElementById('workoutDateInput').value = selectedCalendarDate;
+            }
+            switchTab('record');
+        }
+
+        function renderCalendar() {
+            const grid = document.getElementById('calendarGrid');
+            const title = document.getElementById('calendarMonthTitle');
+            if (!grid || !title) return;
+
+            title.textContent = `${calendarCurrentYear}年 ${calendarCurrentMonth + 1}月`;
+            grid.innerHTML = '';
+
+            const firstDay = new Date(calendarCurrentYear, calendarCurrentMonth, 1).getDay();
+            const totalDays = new Date(calendarCurrentYear, calendarCurrentMonth + 1, 0).getDate();
+
+            const curr = getCurrentProject();
+            let projectStart = null;
+            if (curr && curr.start_date) {
+                projectStart = new Date(curr.start_date + 'T00:00:00');
+            }
+
+            const todayStr = new Date().toISOString().split('T')[0];
+
+            for (let i = 0; i < firstDay; i++) {
+                const empty = document.createElement('div');
+                empty.className = 'min-h-[52px] sm:min-h-[64px] bg-slate-950/30 rounded-xl border border-slate-900/50';
+                grid.appendChild(empty);
+            }
+
+            for (let day = 1; day <= totalDays; day++) {
+                const dayStr = `${calendarCurrentYear}-${String(calendarCurrentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const dayLogs = workoutLogs.filter(l => l.workout_date === dayStr);
+                const hasWorkout = dayLogs.length > 0;
+                const isToday = dayStr === todayStr;
+
+                let weekBadge = '';
+                if (projectStart) {
+                    const targetDate = new Date(dayStr + 'T00:00:00');
+                    const diffDays = Math.floor((targetDate - projectStart) / (1000 * 60 * 60 * 24));
+                    if (diffDays >= 0 && diffDays < 70) {
+                        const wk = Math.floor(diffDays / 7) + 1;
+                        weekBadge = `<span class="text-[9px] font-mono px-1 rounded bg-blue-500/20 text-blue-300">W${wk}</span>`;
+                    } else if (diffDays >= 70 && diffDays < 91) {
+                        weekBadge = `<span class="text-[9px] font-mono px-1 rounded bg-purple-500/20 text-purple-300">休</span>`;
+                    }
+                }
+
+                const cell = document.createElement('button');
+                cell.onclick = () => selectCalendarDate(dayStr);
+                cell.className = `min-h-[52px] sm:min-h-[64px] p-1.5 rounded-xl border transition flex flex-col justify-between text-left ${isToday
+                    ? 'border-emerald-400 bg-emerald-500/10'
+                    : (hasWorkout ? 'border-slate-700 bg-slate-900/90' : 'border-slate-800/80 bg-slate-950 hover:bg-slate-900/60')
+                    } active:scale-95`;
+
+                cell.innerHTML = `
+          <div class="flex items-center justify-between w-full">
+            <span class="text-xs font-bold ${isToday ? 'text-emerald-400 font-mono' : 'text-slate-300'}">${day}</span>
+            ${weekBadge}
+          </div>
+          <div class="flex items-center justify-end w-full">
+            ${hasWorkout ? '<span class="w-2 h-2 rounded-full bg-emerald-400 shadow shadow-emerald-400/50"></span>' : ''}
+          </div>
+        `;
+
+                grid.appendChild(cell);
+            }
+        }
+
+        let synth = null;
+        function playBeep(note = 'C5', duration = '16n') {
+            if (!isSoundEnabled) return;
+            try {
+                if (window.Tone) {
+                    if (Tone.context.state !== 'running') {
+                        Tone.start();
+                    }
+                    if (!synth) {
+                        synth = new Tone.Synth().toDestination();
+                    }
+                    synth.triggerAttackRelease(note, duration);
+                }
+            } catch (e) {
+                console.warn('Audio feedback failed:', e);
+            }
+        }
+
+        function toggleAudio() {
+            isSoundEnabled = !isSoundEnabled;
+            const text = document.getElementById('audioStatusText');
+            const btn = document.getElementById('audioToggleBtn');
+            if (isSoundEnabled) {
+                text.textContent = '音ON';
+                btn.classList.remove('text-slate-500');
+                btn.classList.add('text-slate-400');
+                playBeep('G5', '16n');
+            } else {
+                text.textContent = '消音中';
+                btn.classList.add('text-slate-500');
+            }
+        }
+
+        /* ==========================================================
+           Ladder Calculation & Mechanics
+        ========================================================== */
+        function setProtocol(proto) {
+            currentProtocol = proto;
+            const ladderBtn = document.getElementById('protoLadderBtn');
+            const stdBtn = document.getElementById('protoStandardBtn');
+            const ladderCard = document.getElementById('ladderTimerCard');
+
+            if (proto === 'ladder') {
+                ladderBtn.className = 'px-3 py-1 rounded-lg bg-emerald-600 text-white font-medium transition';
+                stdBtn.className = 'px-3 py-1 rounded-lg text-slate-400 hover:text-white font-medium transition';
+                ladderCard.classList.remove('opacity-40', 'pointer-events-none');
+                document.getElementById('timerSubtext').textContent = '目標: 1回, 2回, 3回... と1段ずつ積み上げ';
+            } else {
+                stdBtn.className = 'px-3 py-1 rounded-lg bg-emerald-600 text-white font-medium transition';
+                ladderBtn.className = 'px-3 py-1 rounded-lg text-slate-400 hover:text-white font-medium transition';
+                document.getElementById('timerSubtext').textContent = '自由セット・インターバルタイマー';
+            }
+        }
+
+        function adjustLadderRung(delta) {
+            playBeep('E5', '32n');
+            let newRung = currentLadderRung + delta;
+            if (newRung < 1) newRung = 1;
+            currentLadderRung = newRung;
+
+            ladderSequence = [];
+            for (let i = 1; i <= currentLadderRung; i++) {
+                ladderSequence.push(i);
+            }
+            updateLadderDisplay();
+        }
+
+        function updateLadderDisplay() {
+            document.getElementById('currentRungDisplay').textContent = currentLadderRung;
+
+            const totalReps = (currentLadderRung * (currentLadderRung + 1)) / 2;
+            document.getElementById('ladderTotalRepsText').textContent = `総レップ数: ${totalReps}回`;
+            document.getElementById('finalRungInput').value = currentLadderRung;
+            document.getElementById('totalRepsInput').value = totalReps;
+
+            const chainContainer = document.getElementById('ladderChainList');
+            chainContainer.innerHTML = '';
+            ladderSequence.forEach((val, idx) => {
+                const span = document.createElement('span');
+                const isCurrent = idx === ladderSequence.length - 1;
+                span.className = isCurrent
+                    ? 'px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30'
+                    : 'px-2 py-0.5 rounded bg-slate-800 text-slate-300';
+                span.textContent = `${val}回`;
+                chainContainer.appendChild(span);
+                if (idx < ladderSequence.length - 1) {
+                    const arrow = document.createElement('span');
+                    arrow.className = 'text-slate-600';
+                    arrow.textContent = '→';
+                    chainContainer.appendChild(arrow);
+                }
+            });
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+
+        function updateTimerUI() {
+            const display = document.getElementById('timerDisplay');
+            const progress = document.getElementById('timerProgressBar');
+            display.textContent = formatTime(timerRemaining);
+
+            const percent = (timerRemaining / TARGET_TIME) * 100;
+            progress.style.width = `${percent}%`;
+
+            if (timerRemaining <= 30) {
+                display.classList.remove('text-white');
+                display.classList.add('text-rose-500');
+                progress.classList.remove('from-emerald-500', 'to-teal-400');
+                progress.classList.add('bg-rose-500');
+            } else {
+                display.classList.remove('text-rose-500');
+                display.classList.add('text-white');
+                progress.classList.remove('bg-rose-500');
+                progress.classList.add('from-emerald-500', 'to-teal-400');
+            }
+        }
+
+        function toggleTimer() {
+            if (isTimerRunning) {
+                pauseTimer();
+            } else {
+                startTimer();
+            }
+        }
+
+        function startTimer() {
+            if (isTimerRunning) return;
+            isTimerRunning = true;
+            playBeep('A5', '8n');
+
+            const startIcon = document.getElementById('startBtnIcon');
+            const startText = document.getElementById('startBtnText');
+            startIcon.className = 'fa-solid fa-pause';
+            startText.textContent = '一時停止';
+
+            timerInterval = setInterval(() => {
+                if (timerRemaining > 0) {
+                    timerRemaining--;
+                    updateTimerUI();
+
+                    if (timerRemaining === 180 || timerRemaining === 60) {
+                        playBeep('F5', '8n');
+                    } else if (timerRemaining <= 5 && timerRemaining > 0) {
+                        playBeep('E5', '16n');
+                    }
+                } else {
+                    clearInterval(timerInterval);
+                    isTimerRunning = false;
+                    playBeep('C6', '2n');
+                    showToast('7分30秒のタイムキャップに達しました！');
+                    startIcon.className = 'fa-solid fa-play';
+                    startText.textContent = '再開';
+
+                    document.getElementById('completedWithinTimeCheckbox').checked = false;
+                    updateTimeStatusLabel();
+                }
+            }, 1000);
+        }
+
+        function pauseTimer() {
+            clearInterval(timerInterval);
+            isTimerRunning = false;
+            const startIcon = document.getElementById('startBtnIcon');
+            const startText = document.getElementById('startBtnText');
+            startIcon.className = 'fa-solid fa-play';
+            startText.textContent = '再開';
+        }
+
+        function resetTimer() {
+            pauseTimer();
+            timerRemaining = TARGET_TIME;
+            updateTimerUI();
+            const startText = document.getElementById('startBtnText');
+            startText.textContent = 'スタート (7:30)';
+        }
+
+        function updateTimeStatusLabel() {
+            const checked = document.getElementById('completedWithinTimeCheckbox').checked;
+            const label = document.getElementById('timeStatusLabel');
+            if (checked) {
+                label.textContent = '✓ 7:30 時間内に完走！';
+                label.className = 'text-xs font-semibold text-emerald-400';
+            } else {
+                label.textContent = '時間内未終了 / 中断';
+                label.className = 'text-xs font-semibold text-amber-400';
+            }
+        }
+
+        function loadCachedExercises() {
+            try {
+                const stored = localStorage.getItem('wt_custom_exercises');
+                if (stored) {
+                    customExercises = JSON.parse(stored);
+                }
+            } catch (e) {
+                customExercises = [];
+            }
+        }
+
+        function getAllExercises() {
+            return [...DEFAULT_EXERCISES, ...customExercises];
+        }
+
+        function renderExerciseOptions() {
+            const select = document.getElementById('exerciseSelect');
+            const filter = document.getElementById('filterExerciseSelect');
+            const all = getAllExercises();
+
+            select.innerHTML = '';
+            filter.innerHTML = '<option value="ALL">すべての種目</option>';
+
+            all.forEach(ex => {
+                const opt = document.createElement('option');
+                opt.value = ex.name;
+                opt.textContent = `${ex.name} [${ex.category}]`;
+                select.appendChild(opt);
+
+                const filterOpt = document.createElement('option');
+                filterOpt.value = ex.name;
+                filterOpt.textContent = ex.name;
+                filter.appendChild(filterOpt);
+            });
+
+            onExerciseChange();
+        }
+
+        function onExerciseChange() {
+            const selectedName = document.getElementById('exerciseSelect').value;
+            const all = getAllExercises();
+            const match = all.find(e => e.name === selectedName);
+            if (match) {
+                document.getElementById('exerciseCategoryBadge').textContent = `分類: ${match.category}`;
+            }
+        }
+
+        function renderExerciseLibrary() {
+            const container = document.getElementById('exerciseLibraryList');
+            container.innerHTML = '';
+            const all = getAllExercises();
+
+            all.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'bg-slate-950 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between';
+                card.innerHTML = `
+          <div>
+            <div class="text-xs font-semibold text-slate-200">${item.name}</div>
+            <div class="text-[10px] text-slate-500 font-mono mt-0.5">${item.category}</div>
+          </div>
+          <button onclick="selectForWorkout('${item.name}')" class="text-xs text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 px-2.5 py-1 rounded-lg">
+            選択
+          </button>
+        `;
+                container.appendChild(card);
+            });
+        }
+
+        function selectForWorkout(exerciseName) {
+            document.getElementById('exerciseSelect').value = exerciseName;
+            onExerciseChange();
+            switchTab('record');
+            showToast(`${exerciseName} をセットしました`);
+        }
+
+        function addNewCustomExercise() {
+            const nameInput = document.getElementById('newExerciseName');
+            const catInput = document.getElementById('newExerciseCategory');
+            const name = nameInput.value.trim();
+            const category = catInput.value;
+
+            if (!name) {
+                showToast('種目名を入力してください');
+                return;
+            }
+
+            const newEx = {
+                id: 'custom-' + Date.now(),
+                name,
+                category
+            };
+
+            customExercises.push(newEx);
+            try {
+                localStorage.setItem('wt_custom_exercises', JSON.stringify(customExercises));
+            } catch (e) { }
+
+            nameInput.value = '';
+            renderExerciseOptions();
+            renderExerciseLibrary();
+            showToast(`「${name}」を追加しました`);
+        }
+
+        function initSupabaseConnection() {
+            const url = localStorage.getItem('supabase_url') || DEFAULT_SUPABASE_URL;
+            const key = localStorage.getItem('supabase_key') || DEFAULT_SUPABASE_KEY;
+
+            if (url && key && window.supabase) {
+                try {
+                    supabaseClient = window.supabase.createClient(url, key);
+
+                    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+                        const user = session?.user || null;
+                        if (user) {
+                            await fetchUserProfileName(user.id);
+                            updateAuthUI(user);
+                            await syncLocalDataToCloud(user.id);
+                            await fetchCloudProjects();
+                            await fetchWorkoutRecords();
+                        } else {
+                            updateAuthUI(null);
+                            loadLocalLogs();
+                            // 未ログイン時はログインを最優先で促す
+                            setTimeout(() => {
+                                openAuthModal();
+                            }, 300);
+                        }
+                    });
+
+                    supabaseClient.auth.getSession().then(async ({data: {session}}) => {
+                        const user = session?.user || null;
+                        if (user) {
+                            await fetchUserProfileName(user.id);
+                            updateAuthUI(user);
+                            await syncLocalDataToCloud(user.id);
+                            await fetchCloudProjects();
+                            await fetchWorkoutRecords();
+                        } else {
+                            updateAuthUI(null);
+                            loadLocalLogs();
+                            setTimeout(() => {
+                                openAuthModal();
+                            }, 300);
+                        }
+                    });
+
+                    return;
+                } catch (err) {
+                    console.error('Supabase initialization failed:', err);
+                }
+            }
+            loadLocalLogs();
+            loadProjects();
+        }
+
+        // 未ログイン時に作成されたローカルデータをSupabaseへ一括アップロード同期
+        async function syncLocalDataToCloud(userId) {
+            if (!supabaseClient || !userId) return;
+
+            // 1. ローカルプロジェクトの移行
+            try {
+                const localProjectsStr = localStorage.getItem('wt_projects');
+                const localProjs = localProjectsStr ? JSON.parse(localProjectsStr) : [];
+                for (const lp of localProjs) {
+                    if (lp.id && lp.id.startsWith('proj-')) {
+                        const {data, error} = await supabaseClient.from('projects').insert([{
+                            title: lp.title,
+                            start_date: lp.start_date,
+                            status: lp.status || 'active',
+                            level: lp.level || 'master_class',
+                            user_id: userId,
+                            notes: `level:${lp.level || 'master_class'}`
+                        }]).select();
+                        if (!error && data && data[0]) {
+                            lp.id = data[0].id;
+                        }
+                    }
+                }
+                localStorage.setItem('wt_projects', JSON.stringify(localProjs));
+            } catch (e) {
+                console.warn('Project cloud sync failed:', e);
+            }
+
+            // 2. ローカルワークアウト記録の移行
+            try {
+                const localLogsStr = localStorage.getItem('wt_workout_records');
+                const localLogs = localLogsStr ? JSON.parse(localLogsStr) : [];
+                const unsyncedLogs = localLogs.filter(l => l.id && l.id.startsWith('local-'));
+                for (const log of unsyncedLogs) {
+                    const {id, ...cleanRecord} = log;
+                    cleanRecord.user_id = userId;
+                    await supabaseClient.from('workouts').insert([cleanRecord]);
+                }
+            } catch (e) {
+                console.warn('Workout logs cloud sync failed:', e);
+            }
+        }
+
+        async function fetchCloudProjects() {
+            if (!supabaseClient || !currentUser) return;
+            try {
+                const {data, error} = await supabaseClient
+                    .from('projects')
+                    .select('*')
+                    .order('created_at', {ascending: false});
+
+                if (!error && data) {
+                    if (data.length > 0) {
+                        projects = data;
+                        currentProjectId = projects[0].id;
+                        saveProjectsToStorage();
+                        renderProjectSelectors();
+                        renderCurriculumView();
+                        renderCalendar();
+                    } else {
+                        // クラウドにプログラムがまだ1つもない場合は作成画面を表示
+                        projects = [];
+                        currentProjectId = null;
+                        document.getElementById('cancelProjectModalBtn').classList.add('hidden');
+                        openNewProjectModal();
+                    }
+                }
+            } catch (err) {
+                console.warn('Could not fetch projects from cloud:', err);
+            }
+        }
+
+        function openSupabaseModal() {
+            document.getElementById('supabaseUrlInput').value = localStorage.getItem('supabase_url') || DEFAULT_SUPABASE_URL;
+            document.getElementById('supabaseKeyInput').value = localStorage.getItem('supabase_key') || DEFAULT_SUPABASE_KEY;
+            document.getElementById('supabaseModal').classList.remove('hidden');
+            document.getElementById('supabaseModal').classList.add('flex');
+        }
+
+        function closeSupabaseModal() {
+            document.getElementById('supabaseModal').classList.add('hidden');
+            document.getElementById('supabaseModal').classList.remove('flex');
+        }
+
+        function saveSupabaseConfig() {
+            const url = document.getElementById('supabaseUrlInput').value.trim();
+            const key = document.getElementById('supabaseKeyInput').value.trim();
+
+            if (!url || !key) {
+                showToast('URLとKeyを入力してください');
+                return;
+            }
+
+            localStorage.setItem('supabase_url', url);
+            localStorage.setItem('supabase_key', key);
+            closeSupabaseModal();
+
+            initSupabaseConnection();
+            showToast('Supabaseの設定を保存しました');
+        }
+
+        function clearSupabaseConfig() {
+            localStorage.removeItem('supabase_url');
+            localStorage.removeItem('supabase_key');
+            supabaseClient = null;
+            document.getElementById('syncStatusBadge').textContent = 'ローカル稼働';
+            document.getElementById('syncStatusBadge').className = 'text-slate-300';
+            closeSupabaseModal();
+            showToast('接続情報を消去しました');
+            loadLocalLogs();
+        }
+
+        function loadLocalLogs() {
+            try {
+                const stored = localStorage.getItem('wt_workout_records');
+                workoutLogs = stored ? JSON.parse(stored) : [];
+            } catch (e) {
+                workoutLogs = [];
+            }
+            updateHistoryCount();
+        }
+
+        async function fetchWorkoutRecords() {
+            if (!supabaseClient || !currentUser) {
+                loadLocalLogs();
+                return;
+            }
+
+            try {
+                const {data, error} = await supabaseClient
+                    .from('workouts')
+                    .select('*')
+                    .order('workout_date', {ascending: false});
+
+                if (error) throw error;
+
+                workoutLogs = data || [];
+                updateHistoryCount();
+                renderHistoryList();
+                renderCalendar();
+                renderCurriculumView();
+                updateActiveProjectUI();
+            } catch (err) {
+                console.warn('Supabase fetch failed, falling back to local storage:', err.message);
+                loadLocalLogs();
+            }
+        }
+
+        async function saveWorkoutRecord() {
+            const exercise = document.getElementById('exerciseSelect').value;
+            const all = getAllExercises();
+            const match = all.find(e => e.name === exercise);
+            const category = match ? match.category : '自重';
+            const workoutDate = document.getElementById('workoutDateInput').value;
+            const weekNumber = parseInt(document.getElementById('sessionWeekSelect').value, 10) || 1;
+            const dayNumber = parseInt(document.getElementById('sessionDaySelect').value, 10) || 1;
+            const rung = parseInt(document.getElementById('finalRungInput').value, 10) || 0;
+            const totalReps = parseInt(document.getElementById('totalRepsInput').value, 10) || 0;
+            const completedWithinTime = document.getElementById('completedWithinTimeCheckbox').checked;
+            const notes = document.getElementById('workoutNoteInput').value.trim();
+            const elapsedSeconds = TARGET_TIME - timerRemaining;
+
+            const record = {
+                id: 'local-' + Date.now(),
+                project_id: currentProjectId,
+                week_number: weekNumber,
+                day_number: dayNumber,
+                workout_date: workoutDate,
+                exercise_name: exercise,
+                category: category,
+                protocol: currentProtocol,
+                ladder_rung: rung,
+                total_reps: totalReps,
+                ladder_chain: ladderSequence.join(','),
+                completed_within_time: completedWithinTime,
+                target_time_seconds: TARGET_TIME,
+                elapsed_seconds: elapsedSeconds,
+                notes: notes,
+                created_at: new Date().toISOString()
+            };
+
+            if (supabaseClient && currentUser) {
+                try {
+                    const {id, ...dbRecord} = record;
+                    dbRecord.user_id = currentUser.id;
+                    const {error} = await supabaseClient.from('workouts').insert([dbRecord]);
+                    if (error) throw error;
+                    showToast('Supabaseにワークアウトを保存しました！');
+                    await fetchWorkoutRecords();
+                } catch (err) {
+                    console.error('Supabase save error:', err);
+                    showToast('クラウド保存に失敗したためローカルに保存しました');
+                    saveRecordLocally(record);
+                }
+            } else {
+                saveRecordLocally(record);
+                showToast('ローカルストレージに保存しました（ログインするとクラウド同期できます）');
+            }
+
+            document.getElementById('workoutNoteInput').value = '';
+            updateActiveProjectUI();
+            renderCurriculumView();
+            renderCalendar();
+        }
+
+        function saveRecordLocally(record) {
+            workoutLogs.unshift(record);
+            try {
+                localStorage.setItem('wt_workout_records', JSON.stringify(workoutLogs));
+            } catch (e) { }
+            updateHistoryCount();
+            renderHistoryList();
+            renderCalendar();
+        }
+
+        async function deleteRecord(id) {
+            if (supabaseClient && !id.startsWith('local-')) {
+                try {
+                    const {error} = await supabaseClient.from('workouts').delete().eq('id', id);
+                    if (error) throw error;
+                    showToast('記録を削除しました');
+                    await fetchWorkoutRecords();
+                    return;
+                } catch (err) {
+                    console.error('Supabase delete error:', err);
+                }
+            }
+
+            workoutLogs = workoutLogs.filter(log => log.id !== id);
+            try {
+                localStorage.setItem('wt_workout_records', JSON.stringify(workoutLogs));
+            } catch (e) { }
+            updateHistoryCount();
+            renderHistoryList();
+            showToast('記録を削除しました');
+        }
+
+        function updateHistoryCount() {
+            const badge = document.getElementById('historyCount');
+            if (badge) badge.textContent = workoutLogs.length;
+        }
+
+        function renderHistoryList() {
+            const container = document.getElementById('historyListContainer');
+            const filter = document.getElementById('filterExerciseSelect').value;
+            container.innerHTML = '';
+
+            const filtered = workoutLogs.filter(item => {
+                if (filter === 'ALL') return true;
+                return item.exercise_name === filter;
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-500">
+            <i class="fa-solid fa-folder-open text-3xl mb-2 text-slate-600 block"></i>
+            記録がまだありません。「筋トレ」タブから記録を保存しましょう！
+          </div>
+        `;
+                return;
+            }
+
+            filtered.forEach(log => {
+                const card = document.createElement('div');
+                card.className = 'bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow space-y-2.5 transition hover:border-slate-700';
+
+                const statusBadge = log.completed_within_time
+                    ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">7:30 完走</span>`
+                    : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">時間オーバー/中断</span>`;
+
+                const weekDayTag = (log.week_number && log.day_number)
+                    ? `<span class="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-emerald-300 font-semibold border border-slate-700">Week ${log.week_number} - Day ${log.day_number}</span>`
+                    : '';
+
+                card.innerHTML = `
+          <div class="flex items-start justify-between">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-slate-400 font-mono">${log.workout_date}</span>
+                ${weekDayTag}
+                ${statusBadge}
+              </div>
+              <h3 class="text-base font-bold text-white mt-1">${log.exercise_name}</h3>
+              <div class="text-xs text-slate-400">${log.category || '自重トレ'}</div>
+            </div>
+            <button onclick="deleteRecord('${log.id}')" class="text-slate-500 hover:text-rose-400 p-1.5 transition" title="削除">
+              <i class="fa-solid fa-trash-can text-xs"></i>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-800/80 text-xs">
+            <div class="bg-slate-950 px-3 py-2 rounded-xl">
+              <span class="text-slate-500 block text-[10px]">最高到達段数</span>
+              <span class="text-emerald-400 font-bold font-mono text-sm">${log.ladder_rung || 0} 段</span>
+            </div>
+            <div class="bg-slate-950 px-3 py-2 rounded-xl">
+              <span class="text-slate-500 block text-[10px]">合計レップ数</span>
+              <span class="text-teal-300 font-bold font-mono text-sm">${log.total_reps || 0} 回</span>
+            </div>
+            <div class="bg-slate-950 px-3 py-2 rounded-xl col-span-2 sm:col-span-1">
+              <span class="text-slate-500 block text-[10px]">経過時間</span>
+              <span class="text-slate-300 font-bold font-mono text-sm">${formatTime(log.elapsed_seconds || 450)}</span>
+            </div>
+          </div>
+
+          ${log.notes ? `
+            <div class="text-xs text-slate-300 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/60">
+              <i class="fa-solid fa-comment-dots text-slate-500 mr-1.5"></i>${log.notes}
+            </div>
+          ` : ''}
+        `;
+                container.appendChild(card);
+            });
+        }
+
+        function exportLogsJson() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(workoutLogs, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `workout_logs_${new Date().toISOString().split('T')[0]}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+            showToast('ログデータをダウンロードしました');
+        }
+
+        let toastTimeout = null;
+        function showToast(message) {
+            const toast = document.getElementById('toastNotification');
+            const text = document.getElementById('toastMessage');
+            text.textContent = message;
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+                toast.classList.remove('translate-y-0', 'opacity-100');
+            }, 3000);
+        }
+    </script>
+</body>
+
+</html>
